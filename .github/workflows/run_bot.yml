@@ -1,0 +1,30 @@
+name: Run 24/7 Bot
+
+on:
+  schedule:
+    - cron: '0 */5 * * *' # প্রতি ৫ ঘণ্টা পর পর অটোমেটিক রান হবে
+  workflow_dispatch: # ম্যানুয়ালি চালানোর জন্য
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Run Python Script
+        run: python bot.py
+
+
+
+        
