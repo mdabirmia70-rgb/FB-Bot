@@ -2,14 +2,14 @@ name: Run 24/7 Bot
 
 on:
   schedule:
-    - cron: '0 */5 * * *' # প্রতি ৫ ঘণ্টা পর পর অটোমেটিক রান হবে
-  workflow_dispatch: # ম্যানুয়ালি চালানোর জন্য
+    - cron: '0 */5 * * *'
+  workflow_dispatch:
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository code
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Setup Python
@@ -17,14 +17,20 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install Dependencies
+      - name: Install Google Chrome & Chromedriver
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable chromedriver
+
+      - name: Install Python packages
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install selenium google-genai python-dotenv
 
-      - name: Run Python Script
+      - name: Run Bot
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          FB_C_USER: ${{ secrets.FB_C_USER }}
+          FB_XS_TOKEN: ${{ secrets.FB_XS_TOKEN }}
+          E2EE_PIN: ${{ secrets.E2EE_PIN }}
         run: python bot.py
-
-
-
-        
