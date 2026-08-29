@@ -17,15 +17,17 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install Google Chrome & Chromedriver
+      - name: Install Google Chrome
         run: |
-          sudo apt-get update
-          sudo apt-get install -y google-chrome-stable chromedriver
+          sudo apt-get update || true
+          sudo apt-get install -y wget
+          wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo dpkg -i google-chrome-stable_current_amd64.deb || sudo apt-get install -f -y
 
       - name: Install Python packages
         run: |
           python -m pip install --upgrade pip
-          pip install selenium google-genai python-dotenv
+          pip install selenium google-genai python-dotenv webdriver-manager
 
       - name: Run Bot
         env:
