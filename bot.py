@@ -205,15 +205,31 @@ try:
     def send_message(text_to_send):
         try:
             message_box = driver.find_element(By.XPATH, '//div[@role="textbox"]')
-            driver.execute_script("arguments[0].focus(); arguments[0].click();", message_box)
-            time.sleep(0.3)
             
-            message_box.send_keys(text_to_send)
-            time.sleep(0.3)
-            message_box.send_keys(Keys.ENTER)
+            # JavaScript দিয়ে মেসেজ ইনসার্ট ফোকাস করা
+            js_script = """
+            var el = arguments[0];
+            var text = arguments[1];
+            el.focus();
+            document.execCommand('insertText', false, text);
+            """
+            driver.execute_script(js_script, message_box, text_to_send)
+            time.sleep(0.5)
+            
+            # ActionChains দিয়ে Enter চাপ দেওয়া
+            actions = ActionChains(driver)
+            actions.send_keys_to_element(message_box, Keys.ENTER)
+            actions.perform()
+            time.sleep(1)
             print(f"[বট উত্তর পাঠিয়েছে]: {text_to_send}")
         except Exception as err:
-            print(f"[মেসেজ পাঠাতে সমস্যা]: {err}")
+            try:
+                # Enter না কাজ করলে Send বাটন ক্লিক করা
+                send_btn = driver.find_element(By.XPATH, '//div[@aria-label="Press Enter to send" or @aria-label="Send" or @aria-label="পাঠান"]')
+                send_btn.click()
+                print(f"[বট উত্তর পাঠিয়েছে (Button Click)]: {text_to_send}")
+            except Exception as btn_err:
+                print(f"[মেসেজ পাঠাতে সমস্যা]: {err} | {btn_err}")
 
     def switch_to_unread_chat():
         try:
@@ -256,7 +272,8 @@ try:
 
                 x_pos = last_element.location["x"]
 
-                if x_pos > 400:
+                # নিজের পাঠানো মেসেজ (ডানপাশের X-pos) ফিল্টার করা
+                if x_pos > 550:
                     time.sleep(2)
                     continue
 
@@ -284,5 +301,3 @@ finally:
         driver.quit()
     except:
         pass
-
-
