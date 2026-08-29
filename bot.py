@@ -15,15 +15,31 @@ from selenium.webdriver.common.action_chains import ActionChains
 # .env ফাইল থেকে ভ্যারিয়েবল লোড
 load_dotenv()
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+# একাধিক Gemini API Key লোড করা
+raw_keys = [
+    os.getenv("GEMINI_API_KEY_1"),
+    os.getenv("GEMINI_API_KEY_2"),
+    os.getenv("GEMINI_API_KEY_3"),
+    os.getenv("GEMINI_API_KEY_4"),
+    os.getenv("GEMINI_API_KEY_5"),
+    os.getenv("GEMINI_API_KEY") # ব্যাকআপ হিসেবে যদি পুরোনো সিঙ্গেল Key থাকে
+]
+
+API_KEYS = [k for k in raw_keys if k]
+current_key_index = 0
+
 FB_C_USER = os.getenv("FB_C_USER")
 FB_XS_TOKEN = os.getenv("FB_XS_TOKEN")
 E2EE_PIN = os.getenv("E2EE_PIN")
 
-client = genai.Client(api_key=GEMINI_API_KEY)
-
 def generate_ai_response(user_message):
+    global current_key_index
     print("-> Gemini AI এর কাছে উত্তর চাওয়া হচ্ছে...")
+    
+    if not API_KEYS:
+        print("[এরর]: কোনো Gemini API Key পাওয়া যায়নি!")
+        return None
+
     prompt = f"""You are 'মোছাঃ সামসুন নাহার' (Mst. Samsun Nahar), a friendly, cute, and sweet Bangladeshi girl having a natural chat on Facebook Messenger.
     
 
@@ -53,17 +69,26 @@ User message: {user_message}"""
         "gemini-pro-latest",
     ]
 
-    for model_name in models_to_try:
-        try:
-            response = client.models.generate_content(
-                model=model_name, contents=prompt
-            )
-            if response and response.text:
-                return response.text.strip()
-        except Exception as e:
-            print(f"[{model_name} এরর]: {e}")
-            time.sleep(1.5)
-            continue
+    # সবগুলো API Key ঘুরিয়ে চেষ্টা করার জন্য লুপ
+    for _ in range(len(API_KEYS)):
+        current_api_key = API_KEYS[current_key_index]
+        client = genai.Client(api_key=current_api_key)
+        
+        for model_name in models_to_try:
+            try:
+                response = client.models.generate_content(
+                    model=model_name, contents=prompt
+                )
+                if response and response.text:
+                    return response.text.strip()
+            except Exception as e:
+                print(f"[{model_name} এরর - Key {current_key_index + 1}]: {e}")
+                time.sleep(1)
+                continue
+        
+        # বর্তমান Key দিয়ে সব মডেল ব্যর্থ হলে/লিমিট শেষ হলে পরের Key-তে সুইচ করা
+        current_key_index = (current_key_index + 1) % len(API_KEYS)
+        print(f"-> Key {current_key_index + 1}-এ সুইচ করা হচ্ছে...")
 
     return None
 
