@@ -1,32 +1,3 @@
-
-import time
-
-start_time = time.time()
-MAX_RUN_TIME = 5 * 60 * 60  # ৫ ঘণ্টা (১৮০০০ সেকেন্ড)
-
-print("Bot started running...")
-
-while True:
-    # ৫ ঘণ্টা পার হলে বট বন্ধ হয়ে যাবে
-    if time.time() - start_time > MAX_RUN_TIME:
-        print("5 hours completed. Stopping safely...")
-        break
-
-    # ----------------------------------------
-    # আপনার বটের মূল কোড/লজিক এখানে থাকবে
-    # ----------------------------------------
-
-    time.sleep(5)  # প্রয়োজন অনুযায়ী সময় অ্যাডজাস্ট করুন
-
-
-
-
-
-
-
-
-
-
 import glob
 import os
 import shutil
@@ -247,20 +218,18 @@ try:
 
     handle_pin_popup()
 
-    # Pyperclip ছাড়া সরাসরি সেন্ড করার নতুন ফাংশন
     def send_message(text_to_send):
         try:
             message_box = driver.find_element(By.XPATH, '//div[@role="textbox"]')
             driver.execute_script("arguments[0].focus(); arguments[0].click();", message_box)
             time.sleep(0.3)
             
-            # সরাসরি ইনপুট বক্সে মেসেজ টাইপ করা এবং Enter দেওয়া
             message_box.send_keys(text_to_send)
             time.sleep(0.3)
             message_box.send_keys(Keys.ENTER)
             print(f"[বট উত্তর পাঠিয়েছে]: {text_to_send}")
         except Exception as err:
-            print(f"[মেসেজ পাঠাতে সমস্যা]: {err}")
+            print(f"[মেসেজ পাঠاتے সমস্যা]: {err}")
 
     def switch_to_unread_chat():
         try:
@@ -293,11 +262,19 @@ try:
         return False
 
     last_replied_message = ""
+    start_time = time.time()
+    MAX_RUN_TIME = 5 * 60 * 60  # ৫ ঘণ্টা সময়সীমা
+
     print("\n==================================================")
     print(" Gemini AI বট মেসেজ রিসিভ করার জন্য প্রস্তুত...")
     print("==================================================\n")
 
     while True:
+        # ৫ ঘণ্টা পূর্ণ হলে নিরাপদভাবে এক্সিট করবে
+        if time.time() - start_time > MAX_RUN_TIME:
+            print("5 hours completed. Stopping safely for next scheduled restart...")
+            break
+
         try:
             switch_to_unread_chat()
 
@@ -336,3 +313,9 @@ try:
 
 except Exception as e:
     print(f"[প্রধান এরর]: {e}")
+finally:
+    try:
+        driver.quit()
+    except:
+        pass
+
