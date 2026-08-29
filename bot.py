@@ -4,7 +4,7 @@ import shutil
 import sys
 import time
 from google import genai
-from dotenv import load_dotenv, set_key
+from dotenv import load_dotenv
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
@@ -64,17 +64,6 @@ def inject_cookies(driver, c_user, xs_token):
     ]
     for cookie in cookies:
         driver.add_cookie(cookie)
-
-def get_fresh_cookies():
-    print("\n[⚠️ কুকিজের মেয়াদ শেষ বা কাজ করছে না! ⚠️]")
-    new_c_user = input("👉 নতুন FB_C_USER দিয়ে Enter দিন: ").strip()
-    new_xs = input("👉 নতুন FB_XS_TOKEN দিয়ে Enter দিন: ").strip()
-    
-    if os.path.exists(".env"):
-        set_key(".env", "FB_C_USER", new_c_user)
-        set_key(".env", "FB_XS_TOKEN", new_xs)
-    
-    return new_c_user, new_xs
 
 def is_stub_browser_or_driver(path):
     if not path or not os.path.exists(path):
@@ -169,20 +158,15 @@ else:
     driver = webdriver.Chrome(options=chrome_options)
 
 try:
-    current_c_user = FB_C_USER
-    current_xs = FB_XS_TOKEN
-
-    inject_cookies(driver, current_c_user, current_xs)
+    inject_cookies(driver, FB_C_USER, FB_XS_TOKEN)
 
     print("মেসেঞ্জারে প্রবেশ করা হচ্ছে...")
     driver.get("https://www.facebook.com/messages/t/")
     time.sleep(6)
 
     if "login" in driver.current_url or len(driver.find_elements(By.XPATH, '//div[@role="textbox"] | //div[@role="gridcell"]')) == 0:
-        current_c_user, current_xs = get_fresh_cookies()
-        inject_cookies(driver, current_c_user, current_xs)
-        driver.get("https://www.facebook.com/messages/t/")
-        time.sleep(6)
+        print("\n[⚠️ কুকিজের মেয়াদ শেষ বা লগইন ব্যর্থ হয়েছে! সিক্রেটস থেকে নতুন কুকিজ সেট করুন।]")
+        sys.exit(1)
 
     def handle_pin_popup():
         try:
@@ -229,34 +213,17 @@ try:
             message_box.send_keys(Keys.ENTER)
             print(f"[বট উত্তর পাঠিয়েছে]: {text_to_send}")
         except Exception as err:
-            print(f"[মেসেজ পাঠاتے সমস্যা]: {err}")
+            print(f"[মেসেজ পাঠাতে সমস্যা]: {err}")
 
     def switch_to_unread_chat():
         try:
-            js_script = """
-            var elements = document.querySelectorAll('div[role="gridcell"]');
-            for (var el of elements) {
-                if (el.querySelector('span[style*="background-color"]') || el.innerText.includes('m ago') || el.innerText.includes('1m')) {
-                    var link = el.querySelector('a') || el;
-                    link.focus();
-                    ['mousedown', 'mouseup', 'click'].forEach(eventType => {
-                        var event = new MouseEvent(eventType, {
-                            view: window,
-                            bubbles: true,
-                            cancelable: true
-                        });
-                        link.dispatchEvent(event);
-                    });
-                    return true;
-                }
-            }
-            return false;
-            """
-            success = driver.execute_script(js_script)
-            if success:
-                print("\n[📩 নতুন আনরিড চ্যাটে সফলভাবে সুইচ করা হয়েছে!]")
-                time.sleep(3)
-                return True
+            chats = driver.find_elements(By.XPATH, '//div[@role="gridcell"]')
+            for chat in chats:
+                if chat.find_elements(By.XPATH, './/span[contains(@style, "background-color")]') or "m ago" in chat.text or "1m" in chat.text:
+                    chat.click()
+                    print("\n[📩 নতুন আনরিড চ্যাটে সফলভাবে সুইচ করা হয়েছে!]")
+                    time.sleep(3)
+                    return True
         except Exception as e:
             pass
         return False
@@ -270,7 +237,6 @@ try:
     print("==================================================\n")
 
     while True:
-        # ৫ ঘণ্টা পূর্ণ হলে নিরাপদভাবে এক্সিট করবে
         if time.time() - start_time > MAX_RUN_TIME:
             print("5 hours completed. Stopping safely for next scheduled restart...")
             break
@@ -278,7 +244,7 @@ try:
         try:
             switch_to_unread_chat()
 
-            messages = driver.find_elements(By.XPATH, '//div[@dir="auto"]')
+            messages = driver.find_elements(By.XPATH, '//div[@role="row"]//div[@dir="auto"] | //div[@dir="auto"]')
 
             if messages:
                 last_element = messages[-1]
@@ -290,7 +256,7 @@ try:
 
                 x_pos = last_element.location["x"]
 
-                if x_pos > 460:
+                if x_pos > 400:
                     time.sleep(2)
                     continue
 
@@ -318,4 +284,5 @@ finally:
         driver.quit()
     except:
         pass
+
 
