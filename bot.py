@@ -11,6 +11,7 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
+from webdriver_manager.chrome import ChromeDriverManager
 
 # .env ফাইল থেকে ভ্যারিয়েবল লোড
 load_dotenv()
@@ -61,7 +62,7 @@ def generate_ai_response(user_message, chat_id="default_chat"):
         print("[এরর]: কোনো Gemini API Key পাওয়া যায়নি!")
         return None
 
-    # আপনার অনুরোধ অনুযায়ী মডেলের নামসমূহ
+    # মডেলের নামসমূহ
     models_to_try = [
         "gemini-3.6-flash",
         "gemini-3.6-flash-lite",
@@ -147,7 +148,9 @@ browser_binary = find_real_browser_binary()
 if browser_binary:
     chrome_options.binary_location = browser_binary
 
-driver = webdriver.Chrome(options=chrome_options)
+# webdriver-manager ব্যবহার করে ইনস্টল করা Chrome-এর সাথে মানানসই ChromeDriver লোড
+service = Service(ChromeDriverManager().install())
+driver = webdriver.Chrome(service=service, options=chrome_options)
 
 try:
     inject_cookies(driver, FB_C_USER, FB_XS_TOKEN)
