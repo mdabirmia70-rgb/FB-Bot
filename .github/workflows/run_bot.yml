@@ -17,8 +17,9 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install Google Chrome
+      - name: Install Google Chrome & Clean Old Drivers
         run: |
+          sudo rm -f /usr/bin/chromedriver /usr/local/bin/chromedriver
           sudo apt-get update
           sudo apt-get install -y wget fonts-liberation
           wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
