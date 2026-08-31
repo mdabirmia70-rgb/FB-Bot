@@ -48,8 +48,9 @@ CRITICAL BEHAVIORAL & MEMORY RULES:
    - DO NOT repeat the exact same greetings, reactions, or follow-up questions in every message.
    - If the user already answered a question (e.g., "চা খেয়েছো"), do NOT ask it again. Move the conversation forward naturally like a real friend.
 
-3. EXTREMELY SHORT & NATURAL TEXTING STYLE (STRICT RULE):
-   - NEVER write long paragraphs. Keep replies short and human-like (MAXIMUM 1 to 2 short lines).
+3. EXTREMELY SHORT & COMPACT TEXTING STYLE (STRICT RULE):
+   - ALWAYS keep your responses VERY SHORT (Strictly between 80 to 130 characters maximum).
+   - Maximum 1 or 2 small lines per message. Never generate long explanations or paragraphs.
    - ALWAYS reply in natural Bangla script (Bangla font), even for Banglish or English inputs.
    - Use casual markers ("হুমম", "আরে না", "হাহা", "ওহ্", "আচ্ছা", "ধুর!") and natural emojis (😊, 🌸, 😅, ☕, 🙈, ✨).
 
@@ -62,7 +63,7 @@ def get_current_time_context():
     now = datetime.now(bd_tz)
     return f"(Current Time: {now.strftime('%I:%M %p')})"
 
-# অন-ডিমান্ড হিস্ট্রি রিড ফাংশন (শুধু সেশন ফেল করলে বা নতুন সেশনে কল হবে)
+# অন-ডিমান্ড হিস্ট্রি রিড ফাংশন
 def fetch_screen_history():
     try:
         messages = driver.find_elements(By.XPATH, '//div[@role="row"]//div[@dir="auto"] | //div[@dir="auto"]')
@@ -229,19 +230,38 @@ try:
 
     def send_message(text_to_send):
         try:
-            # লেখাগুলোকে ছোট ছোট পার্টে (২-৩ লাইন) ভাগ করে পাঠানো
+            # সর্বোচ্চ ১৩০ অক্ষরে মেসেজ টুকরো (Chunk) করা
+            MAX_CHUNK_LIMIT = 130
+            message_chunks = []
+
             lines = [line.strip() for line in text_to_send.split("\n") if line.strip()]
-            
-            # প্রতি ২টি লাইন পর পর আলাদা মেসেজ হিসেবে পাঠানো হবে
-            chunk_size = 2
-            message_chunks = ["\n".join(lines[i:i + chunk_size]) for i in range(0, len(lines), chunk_size)]
+            current_chunk = ""
+
+            for line in lines:
+                if len(current_chunk) + len(line) + 1 <= MAX_CHUNK_LIMIT:
+                    current_chunk = f"{current_chunk}\n{line}".strip()
+                else:
+                    if current_chunk:
+                        message_chunks.append(current_chunk)
+                    
+                    # কোনো একটা একক লাইনই যদি ১৩০ অক্ষরের চেয়ে বড় হয়
+                    while len(line) > MAX_CHUNK_LIMIT:
+                        split_pos = line.rfind(" ", 0, MAX_CHUNK_LIMIT)
+                        if split_pos == -1:
+                            split_pos = MAX_CHUNK_LIMIT
+                        message_chunks.append(line[:split_pos].strip())
+                        line = line[split_pos:].strip()
+                    current_chunk = line
+
+            if current_chunk:
+                message_chunks.append(current_chunk)
 
             for chunk in message_chunks:
                 msg_length = len(chunk)
                 
-                # 20-25 WPM টাইপিং স্পিডের জন্য অক্ষর প্রতি 0.24 থেকে 0.30 সেকেন্ড বিলম্ব
+                # 20-25 WPM স্পিডের জন্য (অক্ষর প্রতি 0.24-0.30 সেক)
                 char_delay_min, char_delay_max = 0.24, 0.30
-                initial_think_delay = random.uniform(1.2, 2.5)
+                initial_think_delay = random.uniform(1.0, 2.0)
 
                 time.sleep(initial_think_delay)
 
@@ -249,7 +269,7 @@ try:
                 message_box.click()
                 time.sleep(0.3)
 
-                print(f"-> ডাইনামিক টাইপিং (20-25 WPM) শুরু হচ্ছে ({msg_length} টি অক্ষর)...")
+                print(f"-> টাইপিং শুরু হচ্ছে ({msg_length} টি অক্ষর)...")
                 
                 chunk_lines = chunk.split("\n")
                 for line_idx, line in enumerate(chunk_lines):
@@ -257,15 +277,14 @@ try:
                         actions = ActionChains(driver)
                         actions.send_keys(char)
                         actions.perform()
-                        # ২০-২৫ WPM স্পিডে প্রতি অক্ষরের মাঝে বিরতি
                         time.sleep(random.uniform(char_delay_min, char_delay_max))
 
                     if line_idx < len(chunk_lines) - 1:
                         actions = ActionChains(driver)
                         actions.key_down(Keys.SHIFT).send_keys(Keys.ENTER).key_up(Keys.SHIFT).perform()
-                        time.sleep(random.uniform(0.3, 0.6))
+                        time.sleep(random.uniform(0.3, 0.5))
 
-                send_delay = random.uniform(1.0, 2.0)
+                send_delay = random.uniform(0.8, 1.5)
                 time.sleep(send_delay)
 
                 actions = ActionChains(driver)
@@ -273,7 +292,7 @@ try:
                 actions.perform()
                 
                 print(f"[বট উত্তর পাঠিয়েছে]: {chunk}")
-                time.sleep(random.uniform(1.2, 2.5)) # পরের পার্ট পাঠানোর আগে বিরতি
+                time.sleep(random.uniform(1.2, 2.5))
 
         except Exception as err:
             print(f"[মেসেজ পাঠাতে সমস্যা]: {err}")
