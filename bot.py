@@ -34,10 +34,8 @@ FB_C_USER = os.getenv("FB_C_USER")
 FB_XS_TOKEN = os.getenv("FB_XS_TOKEN")
 E2EE_PIN = os.getenv("E2EE_PIN")
 
-# ইউজারভিত্তিক চ্যাট সেশন ধরে রাখার ডিকশনারি
 chat_sessions = {}
 
-# সিস্টেম প্রম্পট
 SYSTEM_INSTRUCTION = """You are 'মোছাঃ সামসুন নাহার' (Mst. Samsun Nahar), a real 21-year-old friendly, warm, cute Bangladeshi girl chatting naturally with a friend on Facebook Messenger.
 
 CRITICAL BEHAVIORAL & MEMORY RULES:
@@ -46,7 +44,7 @@ CRITICAL BEHAVIORAL & MEMORY RULES:
    - NEVER admit or hint that you are an AI, bot, or program. Act confused if accused (e.g., "ওমা! এসব কি বলছো? আমি তো সাধারণ মানুষ 😅").
 
 2. STRICT MEMORY & NO REPETITION:
-   - ALWAYS read the ongoing conversation history carefully. NEVER repeat what you or the user already said earlier in the chat.
+   - ALWAYS read the provided ongoing conversation history carefully. NEVER repeat what you or the user already said earlier in the chat.
    - DO NOT repeat the exact same greetings, reactions, or follow-up questions in every message.
    - If the user already answered a question (e.g., "চা খেয়েছো"), do NOT ask it again. Move the conversation forward naturally like a real friend.
 
@@ -64,7 +62,8 @@ def get_current_time_context():
     now = datetime.now(bd_tz)
     return f"(Current Time: {now.strftime('%I:%M %p')})"
 
-def generate_ai_response(user_message, chat_id="default_chat"):
+# generate_ai_response-এ del chat_sessions[chat_id] মুছে দেওয়া হলো এবং চ্যাট হিস্ট্রি প্রম্পটে যুক্ত করা হলো
+def generate_ai_response(user_message, chat_id="default_chat", recent_history=""):
     global current_key_index
     print(f"-> Gemini AI এর কাছে উত্তর চাওয়া হচ্ছে (চ্যাট ID: {chat_id[-10:]})...")
     
@@ -78,7 +77,12 @@ def generate_ai_response(user_message, chat_id="default_chat"):
     ]
 
     time_info = get_current_time_context()
-    full_prompt = f"{user_message} {time_info}"
+    
+    # স্ক্রিন থেকে রিড করা চ্যাট হিস্ট্রি AI প্রম্পটে ফিড করা হচ্ছে
+    if recent_history:
+        full_prompt = f"আগের কথোপকথনের প্রসঙ্গ (গত ১০-১৪টি মেসেজ):\n{recent_history}\n\nবর্তমান মেসেজ: {user_message} {time_info}"
+    else:
+        full_prompt = f"{user_message} {time_info}"
 
     for _ in range(len(API_KEYS)):
         current_api_key = API_KEYS[current_key_index]
@@ -87,7 +91,6 @@ def generate_ai_response(user_message, chat_id="default_chat"):
             try:
                 client = genai.Client(api_key=current_api_key)
                 
-                # চ্যাট সেশন না থাকলে নতুন সেশন তৈরি (হিস্ট্রি ধরে রাখার জন্য)
                 if chat_id not in chat_sessions:
                     print(f"-> নতুন চ্যাট সেশন তৈরি করা হচ্ছে: {chat_id[-10:]}")
                     chat_sessions[chat_id] = client.chats.create(
@@ -102,8 +105,7 @@ def generate_ai_response(user_message, chat_id="default_chat"):
                     return response.text.strip()
             except Exception as e:
                 print(f"[{model_name} এরর - Key {current_key_index + 1}]: {e}")
-                if chat_id in chat_sessions:
-                    del chat_sessions[chat_id]
+                # এরর আসলেও সেশন মুছে ফেলা (del chat_sessions[chat_id]) বাদ দেওয়া হয়েছে
                 time.sleep(1)
                 continue
         
@@ -202,22 +204,17 @@ try:
 
     handle_pin_popup()
 
-    # ডাইনামিক টাইপিং ডিলেসহ মেসেজ পাঠানোর ফাংশন
     def send_message(text_to_send):
         try:
             msg_length = len(text_to_send)
             
-            # ১. মেসেজের দৈঘ্য অনুযায়ী টাইপিং স্পিড এবং মেসেজ পড়ার প্রাথমিক বিরতি নির্ধারণ
             if msg_length <= 15:
-                # ছোট মেসেজের জন্য ১-২ সেকেন্ড বিরতি
                 initial_think_delay = random.uniform(1.0, 2.0)
                 char_delay_min, char_delay_max = 0.03, 0.06
             elif msg_length <= 50:
-                # মাঝারি মেসেজের জন্য ২-৩.৫ সেকেন্ড বিরতি
                 initial_think_delay = random.uniform(2.0, 3.5)
                 char_delay_min, char_delay_max = 0.04, 0.08
             else:
-                # বড় মেসেজের জন্য ৩.৫-৫ সেকেন্ড বিরতি
                 initial_think_delay = random.uniform(3.5, 5.0)
                 char_delay_min, char_delay_max = 0.05, 0.10
 
@@ -242,7 +239,6 @@ try:
                     actions.key_down(Keys.SHIFT).send_keys(Keys.ENTER).key_up(Keys.SHIFT).perform()
                     time.sleep(random.uniform(0.3, 0.7))
 
-            # ২. টাইপিং শেষ হওয়ার পর মানুষের মতো ২ থেকে ৪ সেকেন্ডের মধ্যে র্যান্ডম সময়ে সেন্ড করা
             send_delay = random.uniform(2.0, 3.8)
             print(f"-> টাইপিং শেষ, {send_delay:.1f} সেকেন্ড পর সেন্ড করা হচ্ছে...")
             time.sleep(send_delay)
@@ -315,9 +311,21 @@ try:
                     time.sleep(2)
                     continue
 
+                # স্ক্রিনে থাকা আগের ১০-১৪টি মেসেজের চ্যাট হিস্ট্রি পড়া হচ্ছে
+                history_elements = messages[-15:-1]
+                recent_history_list = []
+                for el in history_elements:
+                    txt = el.text.strip()
+                    if txt:
+                        # মেসেজের এক্স-পজিশন দিয়ে ইউজার এবং বটের মেসেজ আলাদা শনাক্তকরণ
+                        sender = "বট (সামসুন Nahar)" if el.location["x"] > 550 else "ইউজার"
+                        recent_history_list.append(f"{sender}: {txt}")
+                
+                recent_history = "\n".join(recent_history_list)
+
                 print(f"\n[নতুন মেসেজ রিসিভড (ID: {current_chat_id})]: {raw_msg}")
 
-                ai_reply = generate_ai_response(raw_msg, chat_id=current_chat_id)
+                ai_reply = generate_ai_response(raw_msg, chat_id=current_chat_id, recent_history=recent_history)
                 if ai_reply:
                     send_message(ai_reply)
                     last_replied_message = raw_msg
