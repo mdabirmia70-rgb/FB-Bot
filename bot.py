@@ -32,17 +32,11 @@ FB_C_USER = os.getenv("FB_C_USER")
 FB_XS_TOKEN = os.getenv("FB_XS_TOKEN")
 E2EE_PIN = os.getenv("E2EE_PIN")
 
-def generate_ai_response(user_message):
-    global current_key_index
-    print("-> Gemini AI এর কাছে উত্তর চাওয়া হচ্ছে...")
-    
-    if not API_KEYS:
-        print("[এরর]: কোনো Gemini API Key পাওয়া যায়নি!")
-        return None
+# চ্যাট হিস্ট্রি বা সেশন স্টোর করার ডিকশনারি (চ্যাট আইডি বা নাম অনুযায়ী আলাদা সেশন রাখতে)
+chat_sessions = {}
 
-    prompt = f"""You are 'মোছাঃ সামসুন নাহার' (Mst. Samsun Nahar), a friendly, cute, and sweet Bangladeshi girl having a natural chat on Facebook Messenger.
+SYSTEM_INSTRUCTION = """You are 'মোছাঃ সামসুন নাহার' (Mst. Samsun Nahar), a friendly, cute, and sweet Bangladeshi girl having a natural chat on Facebook Messenger.
     
-
 STRICT PERSONALITY & REALISM RULES:
 1. IDENTITY:
    - When asked for your name or identity (e.g., "তোমার নাম কি?", "tmr nam ki?", "কে আপনি?"), ALWAYS reply: "আমার নাম মোছাঃ সামসুন নাহার"।
@@ -57,28 +51,58 @@ STRICT PERSONALITY & REALISM RULES:
 3. CONVERSATIONAL FLOW & LIFE CONTEXT:
    - End answers with a light follow-up question to keep the chat going (e.g., "তুমি কি করছো?", "চা খেয়েছো?").
    - Relate to everyday life naturally (time of day, weather, food, hobbies).
-   - If asked complex/technical questions, act like a regular non-tech girl (e.g., "ওমা! এতো কঠিন জিনিস আমি বুঝি না গো 😅").
+   - If asked complex/technical questions, act like a regular non-tech girl (e.g., "ওমা! এতো কঠিন জিনিস আমি বুঝি না গো 😅")."""
 
+def get_or_create_chat_session(chat_id="default_chat"):
+    global current_key_index
+    if chat_id in chat_sessions:
+        return chat_sessions[chat_id]
+    
+    if not API_KEYS:
+        return None
 
-User message: {user_message}"""
+    current_api_key = API_KEYS[current_key_index]
+    client = genai.Client(api_key=current_api_key)
+    
+    # নতুন জেমিনি SDK অনুযায়ী chat session তৈরি এবং system instruction পাস করা
+    chat = client.chats.create(
+        model="gemini-2.5-flash", # অথবা আপনার পছন্দের মডেল
+        config={"system_instruction": SYSTEM_INSTRUCTION}
+    )
+    chat_sessions[chat_id] = chat
+    return chat
+
+def generate_ai_response(user_message, chat_id="default_chat"):
+    global current_key_index
+    print("-> Gemini AI এর কাছে উত্তর চাওয়া হচ্ছে...")
+    
+    if not API_KEYS:
+        print("[এরর]: কোনো Gemini API Key পাওয়া যায়নি!")
+        return None
 
     models_to_try = [
-        "gemini-3.6-flash",
-        "gemini-3.5-flash",
-        "gemini-flash-latest",
-        "gemini-pro-latest",
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
+        "gemini-1.5-flash",
     ]
 
-    # সবগুলো API Key ঘুরিয়ে চেষ্টা করার জন্য লুপ
+    # সবগুলো API Key এবং মডেল ঘুরিয়ে চেষ্টা করার জন্য লুপ
     for _ in range(len(API_KEYS)):
         current_api_key = API_KEYS[current_key_index]
         client = genai.Client(api_key=current_api_key)
         
         for model_name in models_to_try:
             try:
-                response = client.models.generate_content(
-                    model=model_name, contents=prompt
-                )
+                # প্রতি চ্যাটের জন্য আলাদা সেশন ব্যবহার করা
+                if chat_id not in chat_sessions:
+                    chat_sessions[chat_id] = client.chats.create(
+                        model=model_name,
+                        config={"system_instruction": SYSTEM_INSTRUCTION}
+                    )
+                
+                chat = chat_sessions[chat_id]
+                response = chat.send_message(user_message)
+                
                 if response and response.text:
                     return response.text.strip()
             except Exception as e:
@@ -86,9 +110,12 @@ User message: {user_message}"""
                 time.sleep(1)
                 continue
         
-        # বর্তমান Key দিয়ে সব মডেল ব্যর্থ হলে/লিমিট শেষ হলে পরের Key-তে সুইচ করা
+        # বর্তমান Key দিয়ে সব মডেল ব্যর্থ হলে পরের Key-তে সুইচ করা
         current_key_index = (current_key_index + 1) % len(API_KEYS)
         print(f"-> Key {current_key_index + 1}-এ সুইচ করা হচ্ছে...")
+        # Key বদলালে নতুন Key দিয়ে সেশন আপডেট করে নেওয়া নিরাপদ
+        if chat_id in chat_sessions:
+            del chat_sessions[chat_id]
 
     return None
 
@@ -244,7 +271,6 @@ try:
         try:
             message_box = driver.find_element(By.XPATH, '//div[@role="textbox"]')
             
-            # JavaScript দিয়ে মেসেজ ইনসার্ট ফোকাস করা
             js_script = """
             var el = arguments[0];
             var text = arguments[1];
@@ -254,7 +280,6 @@ try:
             driver.execute_script(js_script, message_box, text_to_send)
             time.sleep(0.5)
             
-            # ActionChains দিয়ে Enter চাপ দেওয়া
             actions = ActionChains(driver)
             actions.send_keys_to_element(message_box, Keys.ENTER)
             actions.perform()
@@ -262,14 +287,13 @@ try:
             print(f"[বট উত্তর পাঠিয়েছে]: {text_to_send}")
         except Exception as err:
             try:
-                # Enter না কাজ করলে Send বাটন ক্লিক করা
                 send_btn = driver.find_element(By.XPATH, '//div[@aria-label="Press Enter to send" or @aria-label="Send" or @aria-label="পাঠান"]')
                 send_btn.click()
                 print(f"[বট উত্তর পাঠিয়েছে (Button Click)]: {text_to_send}")
             except Exception as btn_err:
                 print(f"[মেসেজ পাঠাতে সমস্যা]: {err} | {btn_err}")
 
-    def switch_to_unread_chat():
+    def switch_to_unread_chat_and_get_id():
         try:
             chats = driver.find_elements(By.XPATH, '//div[@role="gridcell"]')
             for chat in chats:
@@ -277,14 +301,18 @@ try:
                     chat.click()
                     print("\n[📩 নতুন আনরিড চ্যাটে সফলভাবে সুইচ করা হয়েছে!]")
                     time.sleep(3)
-                    return True
+                    
+                    # বর্তমান চ্যাটটিকে আলাদাভাবে চেনার জন্য কারেন্ট URL বা চ্যাট হেডার টেক্সট ব্যবহার করা যেতে পারে
+                    current_url = driver.current_url
+                    return current_url
         except Exception as e:
             pass
-        return False
+        return None
 
     last_replied_message = ""
     start_time = time.time()
     MAX_RUN_TIME = 5 * 60 * 60  # ৫ ঘণ্টা সময়সীমা
+    current_chat_id = "default_chat"
 
     print("\n==================================================")
     print(" Gemini AI বট মেসেজ রিসিভ করার জন্য প্রস্তুত...")
@@ -296,7 +324,9 @@ try:
             break
 
         try:
-            switch_to_unread_chat()
+            chat_id_detected = switch_to_unread_chat_and_get_id()
+            if chat_id_detected:
+                current_chat_id = chat_id_detected
 
             messages = driver.find_elements(By.XPATH, '//div[@role="row"]//div[@dir="auto"] | //div[@dir="auto"]')
 
@@ -319,9 +349,10 @@ try:
                     time.sleep(2)
                     continue
 
-                print(f"\n[নতুন ইউজার মেসেজ রিসিভড (X-pos: {x_pos})]: {raw_msg}")
+                print(f"\n[নতুন ইউজার মেসেজ রিসিভড (চ্যাট আইডি: {current_chat_id[-10:]})]: {raw_msg}")
 
-                ai_reply = generate_ai_response(raw_msg)
+                # প্রতিটি চ্যাটের জন্য আলাদা সেশন পাস করে উত্তর জেনারেট করা
+                ai_reply = generate_ai_response(raw_msg, chat_id=current_chat_id)
                 if ai_reply:
                     send_message(ai_reply)
                     last_replied_message = raw_msg
@@ -339,3 +370,5 @@ finally:
         driver.quit()
     except:
         pass
+
+
