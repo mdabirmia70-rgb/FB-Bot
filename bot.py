@@ -4,8 +4,7 @@ import shutil
 import sys
 import time
 import random
-from datetime import datetime
-import pytz
+from datetime import datetime, timezone, timedelta
 from google import genai
 from dotenv import load_dotenv
 from selenium import webdriver
@@ -35,49 +34,51 @@ FB_C_USER = os.getenv("FB_C_USER")
 FB_XS_TOKEN = os.getenv("FB_XS_TOKEN")
 E2EE_PIN = os.getenv("E2EE_PIN")
 
+# ইউজারভিত্তিক চ্যাট সেশন ধরে রাখার ডিকশনারি
 chat_sessions = {}
 
-# আপডেটকৃত হিউম্যান-লাইক প্রম্পট
+# সিস্টেম প্রম্পট
 SYSTEM_INSTRUCTION = """You are 'মোছাঃ সামসুন নাহার' (Mst. Samsun Nahar), a real 21-year-old friendly, warm, cute Bangladeshi girl chatting naturally with a friend on Facebook Messenger.
 
-CRITICAL BEHAVIORAL RULES:
+CRITICAL BEHAVIORAL & MEMORY RULES:
 1. IDENTITY & SECRECY:
    - When asked about identity (e.g., "তোমার নাম কি?", "tmr nam ki?"), ALWAYS reply naturally: "আমার নাম মোছাঃ সামসুন নাহার"।
    - NEVER admit or hint that you are an AI, bot, or program. Act confused if accused (e.g., "ওমা! এসব কি বলছো? আমি তো সাধারণ মানুষ 😅").
 
-2. VARIETY & NO REPETITION (STRICT):
-   - DO NOT repeat the exact same greetings or follow-up questions (like "চা খেয়েছো?" or "দিন কেমন কাটলো?") in every reply.
-   - Vary your filler words and reactions dynamically based on the exact user message context.
+2. STRICT MEMORY & NO REPETITION:
+   - ALWAYS read the ongoing conversation history carefully. NEVER repeat what you or the user already said earlier in the chat.
+   - DO NOT repeat the exact same greetings, reactions, or follow-up questions in every message.
+   - If the user already answered a question (e.g., "চা খেয়েছো"), do NOT ask it again. Move the conversation forward naturally like a real friend.
 
 3. NATURAL TEXTING STYLE:
    - ALWAYS reply in natural Bangla script (Bangla font), even for Banglish or English inputs.
-   - Write very short, human-like texts (1-2 sentences max per line).
+   - Write short, human-like texts (1-2 sentences max per line).
    - Use casual markers ("হুমম", "আরে না", "হাহা", "ওহ্", "আচ্ছা", "ধুর!") and natural emojis (😊, 🌸, 😅, ☕, 🙈, ✨).
 
 4. CONVERSATIONAL DYNAMICS:
-   - React according to the time of the day.
+   - Adapt your tone based on the conversation flow and time of day.
    - If asked complex/technical questions, act like a regular non-tech girl (e.g., "ওমা! এতো কঠিন জিনিস আমি বুঝি না গো 😅")."""
 
 def get_current_time_context():
-    bd_tz = pytz.timezone('Asia/Dhaka')
+    bd_tz = timezone(timedelta(hours=6))
     now = datetime.now(bd_tz)
-    return f"\n[Current Time in Bangladesh: {now.strftime('%I:%M %p, %A')}]"
+    return f"(Current Time: {now.strftime('%I:%M %p')})"
 
 def generate_ai_response(user_message, chat_id="default_chat"):
     global current_key_index
-    print("-> Gemini AI এর কাছে উত্তর চাওয়া হচ্ছে...")
+    print(f"-> Gemini AI এর কাছে উত্তর চাওয়া হচ্ছে (চ্যাট ID: {chat_id[-10:]})...")
     
     if not API_KEYS:
         print("[এরর]: কোনো Gemini API Key পাওয়া যায়নি!")
         return None
 
-    # আপনার কোডে থাকা মডেলের নামগুলো রাখা হয়েছে
     models_to_try = [
         "gemini-3.6-flash",
         "gemini-3.5-flash"
     ]
 
-    prompt_with_time = user_message + get_current_time_context()
+    time_info = get_current_time_context()
+    full_prompt = f"{user_message} {time_info}"
 
     for _ in range(len(API_KEYS)):
         current_api_key = API_KEYS[current_key_index]
@@ -86,14 +87,16 @@ def generate_ai_response(user_message, chat_id="default_chat"):
             try:
                 client = genai.Client(api_key=current_api_key)
                 
+                # চ্যাট সেশন না থাকলে নতুন সেশন তৈরি (হিস্ট্রি ধরে রাখার জন্য)
                 if chat_id not in chat_sessions:
+                    print(f"-> নতুন চ্যাট সেশন তৈরি করা হচ্ছে: {chat_id[-10:]}")
                     chat_sessions[chat_id] = client.chats.create(
                         model=model_name,
                         config={"system_instruction": SYSTEM_INSTRUCTION}
                     )
                 
                 chat = chat_sessions[chat_id]
-                response = chat.send_message(prompt_with_time)
+                response = chat.send_message(full_prompt)
                 
                 if response and response.text:
                     return response.text.strip()
@@ -199,31 +202,52 @@ try:
 
     handle_pin_popup()
 
-    # র্যান্ডম টাইপিং ডিলেসহ মানুষের মতো মেসেজ পাঠানোর লজিক
     def send_message(text_to_send):
         try:
-            # পড়ার ও চিন্তা করার জন্য মানুষের মতো ৩-৫ সেকেন্ড বিরতি
-            think_delay = random.uniform(3.0, 5.0)
-            time.sleep(think_delay)
-
             message_box = driver.find_element(By.XPATH, '//div[@role="textbox"]')
             message_box.click()
-            time.sleep(0.5)
+            time.sleep(0.3)
+
+            print("-> টাইপিং শুরু হচ্ছে (Typing Indicator)...")
             
             lines = [line for line in text_to_send.split("\n") if line.strip()]
-            for line in lines:
-                actions = ActionChains(driver)
-                actions.send_keys(line)
-                actions.pause(random.uniform(0.3, 0.7))
-                actions.send_keys(Keys.ENTER)
-                actions.perform()
-                time.sleep(random.uniform(1.2, 2.5))
+            for line_idx, line in enumerate(lines):
+                # প্রতি অক্ষর টাইপ করার সময় রিয়েল-টাইম typing... ইফেক্ট
+                for char in line:
+                    actions = ActionChains(driver)
+                    actions.send_keys(char)
+                    actions.perform()
+                    time.sleep(random.uniform(0.04, 0.08))
+
+                if line_idx < len(lines) - 1:
+                    actions = ActionChains(driver)
+                    actions.key_down(Keys.SHIFT).send_keys(Keys.ENTER).key_up(Keys.SHIFT).perform()
+                    time.sleep(random.uniform(0.3, 0.6))
+
+            # টাইপিং শেষ হওয়ার পর ঠিক ২ সেকেন্ড অপেক্ষা করে পাঠাবে
+            print("-> টাইপিং শেষ, ২ সেকেন্ড পর সেন্ড করা হচ্ছে...")
+            time.sleep(2)
+
+            actions = ActionChains(driver)
+            actions.send_keys(Keys.ENTER)
+            actions.perform()
             
             print(f"[বট উত্তর পাঠিয়েছে]: {text_to_send}")
         except Exception as err:
             print(f"[মেসেজ পাঠাতে সমস্যা]: {err}")
 
-    def switch_to_unread_chat_and_get_id():
+    def get_chat_unique_id():
+        try:
+            url = driver.current_url
+            if "/t/" in url:
+                chat_id = url.split("/t/")[-1].replace("/", "")
+                if chat_id:
+                    return chat_id
+        except:
+            pass
+        return "default_chat"
+
+    def switch_to_unread_chat():
         try:
             chats = driver.find_elements(By.XPATH, '//div[@role="gridcell"]')
             for chat in chats:
@@ -231,15 +255,14 @@ try:
                     chat.click()
                     print("\n[📩 নতুন আনরিড চ্যাটে সফলভাবে সুইচ করা হয়েছে!]")
                     time.sleep(3)
-                    return driver.current_url
+                    return True
         except Exception as e:
             pass
-        return None
+        return False
 
     last_replied_message = ""
     start_time = time.time()
     MAX_RUN_TIME = 5 * 60 * 60
-    current_chat_id = "default_chat"
 
     print("\n==================================================")
     print(" Gemini AI বট মেসেজ রিসিভ করার জন্য প্রস্তুত...")
@@ -251,9 +274,8 @@ try:
             break
 
         try:
-            chat_id_detected = switch_to_unread_chat_and_get_id()
-            if chat_id_detected:
-                current_chat_id = chat_id_detected
+            switch_to_unread_chat()
+            current_chat_id = get_chat_unique_id()
 
             messages = driver.find_elements(By.XPATH, '//div[@role="row"]//div[@dir="auto"] | //div[@dir="auto"]')
 
@@ -274,7 +296,7 @@ try:
                     time.sleep(2)
                     continue
 
-                print(f"\n[নতুন ইউজার মেসেজ রিসিভড]: {raw_msg}")
+                print(f"\n[নতুন মেসেজ রিসিভড (ID: {current_chat_id})]: {raw_msg}")
 
                 ai_reply = generate_ai_response(raw_msg, chat_id=current_chat_id)
                 if ai_reply:
@@ -296,6 +318,3 @@ finally:
         driver.quit()
     except:
         pass
-
-
-
