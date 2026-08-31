@@ -22,7 +22,7 @@ raw_keys = [
     os.getenv("GEMINI_API_KEY_3"),
     os.getenv("GEMINI_API_KEY_4"),
     os.getenv("GEMINI_API_KEY_5"),
-    os.getenv("GEMINI_API_KEY") # ব্যাকআপ হিসেবে যদি পুরোনো সিঙ্গেল Key থাকে
+    os.getenv("GEMINI_API_KEY") # ব্যাকআপ
 ]
 
 API_KEYS = [k for k in raw_keys if k]
@@ -32,7 +32,7 @@ FB_C_USER = os.getenv("FB_C_USER")
 FB_XS_TOKEN = os.getenv("FB_XS_TOKEN")
 E2EE_PIN = os.getenv("E2EE_PIN")
 
-# চ্যাট হিস্ট্রি বা সেশন স্টোর করার ডিকশনারি (চ্যাট আইডি বা নাম অনুযায়ী আলাদা সেশন রাখতে)
+# চ্যাট হিস্ট্রি রাখার জন্য ডিকশনারি
 chat_sessions = {}
 
 SYSTEM_INSTRUCTION = """You are 'মোছাঃ সামসুন নাহার' (Mst. Samsun Nahar), a friendly, cute, and sweet Bangladeshi girl having a natural chat on Facebook Messenger.
@@ -53,25 +53,6 @@ STRICT PERSONALITY & REALISM RULES:
    - Relate to everyday life naturally (time of day, weather, food, hobbies).
    - If asked complex/technical questions, act like a regular non-tech girl (e.g., "ওমা! এতো কঠিন জিনিস আমি বুঝি না গো 😅")."""
 
-def get_or_create_chat_session(chat_id="default_chat"):
-    global current_key_index
-    if chat_id in chat_sessions:
-        return chat_sessions[chat_id]
-    
-    if not API_KEYS:
-        return None
-
-    current_api_key = API_KEYS[current_key_index]
-    client = genai.Client(api_key=current_api_key)
-    
-    # নতুন জেমিনি SDK অনুযায়ী chat session তৈরি এবং system instruction পাস করা
-    chat = client.chats.create(
-        model="gemini-2.5-flash", # অথবা আপনার পছন্দের মডেল
-        config={"system_instruction": SYSTEM_INSTRUCTION}
-    )
-    chat_sessions[chat_id] = chat
-    return chat
-
 def generate_ai_response(user_message, chat_id="default_chat"):
     global current_key_index
     print("-> Gemini AI এর কাছে উত্তর চাওয়া হচ্ছে...")
@@ -80,20 +61,20 @@ def generate_ai_response(user_message, chat_id="default_chat"):
         print("[এরর]: কোনো Gemini API Key পাওয়া যায়নি!")
         return None
 
+    # আপনার অনুরোধ অনুযায়ী মডেলের নামসমূহ
     models_to_try = [
         "gemini-3.6-flash",
-        "gemini-3.5-flash-lite",
-        "gemini-2.5-flash",
+        "gemini-3.6-flash-lite",
+        "gemini-3.5-flash",
+        "gemini-3.5-flash-lite"
     ]
 
-    # সবগুলো API Key এবং মডেল ঘুরিয়ে চেষ্টা করার জন্য লুপ
     for _ in range(len(API_KEYS)):
         current_api_key = API_KEYS[current_key_index]
         client = genai.Client(api_key=current_api_key)
         
         for model_name in models_to_try:
             try:
-                # প্রতি চ্যাটের জন্য আলাদা সেশন ব্যবহার করা
                 if chat_id not in chat_sessions:
                     chat_sessions[chat_id] = client.chats.create(
                         model=model_name,
@@ -110,10 +91,9 @@ def generate_ai_response(user_message, chat_id="default_chat"):
                 time.sleep(1)
                 continue
         
-        # বর্তমান Key দিয়ে সব মডেল ব্যর্থ হলে পরের Key-তে সুইচ করা
+        # বর্তমান Key ব্যর্থ হলে পরবর্তী Key-তে সুইচ
         current_key_index = (current_key_index + 1) % len(API_KEYS)
         print(f"-> Key {current_key_index + 1}-এ সুইচ করা হচ্ছে...")
-        # Key বদলালে নতুন Key দিয়ে সেশন আপডেট করে নেওয়া নিরাপদ
         if chat_id in chat_sessions:
             del chat_sessions[chat_id]
 
@@ -133,7 +113,6 @@ def inject_cookies(driver, c_user, xs_token):
 def is_stub_browser_or_driver(path):
     if not path or not os.path.exists(path):
         return True
-
     try:
         with open(path, "r", encoding="utf-8", errors="ignore") as fh:
             contents = fh.read(200)
@@ -141,64 +120,19 @@ def is_stub_browser_or_driver(path):
             return True
     except OSError:
         pass
-
-    if os.access(path, os.X_OK):
-        try:
-            with open(path, "rb") as fh:
-                magic = fh.read(4)
-            if magic.startswith(b"\x7fELF"):
-                return False
-        except OSError:
-            pass
-
-    return True
+    return False
 
 def find_real_browser_binary():
     candidates = [
         "/usr/bin/google-chrome",
         "/usr/bin/google-chrome-stable",
-        "/usr/bin/chromium",
         "/usr/bin/chromium-browser",
-        "/snap/bin/chromium",
-        "/opt/google/chrome/chrome",
-        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "/usr/bin/chromium",
     ]
-
     for path in candidates:
-        if path and os.path.exists(path) and os.access(path, os.X_OK) and not is_stub_browser_or_driver(path):
-            return path
-
-    for path in glob.glob(os.path.expanduser("~/.cache/ms-playwright/**/chrome"), recursive=True):
         if os.path.exists(path) and os.access(path, os.X_OK) and not is_stub_browser_or_driver(path):
             return path
-
-    for cmd in ["google-chrome", "google-chrome-stable", "chromium", "chromium-browser"]:
-        path = shutil.which(cmd)
-        if path and not is_stub_browser_or_driver(path):
-            return path
-
-    return None
-
-def find_valid_driver_path():
-    candidates = [
-        "/usr/bin/chromedriver",
-        "/usr/local/bin/chromedriver",
-        "/usr/bin/chromium-driver",
-        "/usr/lib/chromium-browser/chromedriver",
-        shutil.which("chromedriver"),
-    ]
-
-    for path in candidates:
-        if not path:
-            continue
-        if path.endswith("chromedriver") and os.path.exists(path) and not is_stub_browser_or_driver(path):
-            return path
-
-    for path in glob.glob(os.path.expanduser("~/.cache/selenium/chromedriver/**/chromedriver"), recursive=True):
-        if os.path.exists(path) and os.access(path, os.X_OK) and not is_stub_browser_or_driver(path):
-            return path
-
-    return None
+    return shutil.which("google-chrome") or shutil.which("google-chrome-stable")
 
 chrome_options = Options()
 chrome_options.add_argument("--headless=new")
@@ -209,18 +143,11 @@ chrome_options.add_argument("--window-size=1920,1080")
 chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
 browser_binary = find_real_browser_binary()
-webdriver_path = find_valid_driver_path()
 
-if not browser_binary:
-    print("\n[⚠️ real Chromium/Chrome পাওয়া যায়নি!]")
-    sys.exit(1)
+if browser_binary:
+    chrome_options.binary_location = browser_binary
 
-chrome_options.binary_location = browser_binary
-
-if webdriver_path:
-    driver = webdriver.Chrome(service=Service(webdriver_path), options=chrome_options)
-else:
-    driver = webdriver.Chrome(options=chrome_options)
+driver = webdriver.Chrome(options=chrome_options)
 
 try:
     inject_cookies(driver, FB_C_USER, FB_XS_TOKEN)
@@ -230,7 +157,7 @@ try:
     time.sleep(6)
 
     if "login" in driver.current_url or len(driver.find_elements(By.XPATH, '//div[@role="textbox"] | //div[@role="gridcell"]')) == 0:
-        print("\n[⚠️ কুকিজের মেয়াদ শেষ বা লগইন ব্যর্থ হয়েছে! সিক্রেটস থেকে নতুন কুকিজ সেট করুন।]")
+        print("\n[⚠️ কুকিজের মেয়াদ শেষ বা লগইন ব্যর্থ হয়েছে! Secrets থেকে নতুন কুকিজ সেট করুন।]")
         sys.exit(1)
 
     def handle_pin_popup():
@@ -301,17 +228,14 @@ try:
                     chat.click()
                     print("\n[📩 নতুন আনরিড চ্যাটে সফলভাবে সুইচ করা হয়েছে!]")
                     time.sleep(3)
-                    
-                    # বর্তমান চ্যাটটিকে আলাদাভাবে চেনার জন্য কারেন্ট URL বা চ্যাট হেডার টেক্সট ব্যবহার করা যেতে পারে
-                    current_url = driver.current_url
-                    return current_url
+                    return driver.current_url
         except Exception as e:
             pass
         return None
 
     last_replied_message = ""
     start_time = time.time()
-    MAX_RUN_TIME = 5 * 60 * 60  # ৫ ঘণ্টা সময়সীমা
+    MAX_RUN_TIME = 5 * 60 * 60  # ৫ ঘণ্টা
     current_chat_id = "default_chat"
 
     print("\n==================================================")
@@ -340,7 +264,7 @@ try:
 
                 x_pos = last_element.location["x"]
 
-                # নিজের পাঠানো মেসেজ (ডানপাশের X-pos) ফিল্টার করা
+                # নিজের বার্তা (ডানপাশে থাকা) বাদ দেওয়া
                 if x_pos > 550:
                     time.sleep(2)
                     continue
@@ -351,7 +275,6 @@ try:
 
                 print(f"\n[নতুন ইউজার মেসেজ রিসিভড (চ্যাট আইডি: {current_chat_id[-10:]})]: {raw_msg}")
 
-                # প্রতিটি চ্যাটের জন্য আলাদা সেশন পাস করে উত্তর জেনারেট করা
                 ai_reply = generate_ai_response(raw_msg, chat_id=current_chat_id)
                 if ai_reply:
                     send_message(ai_reply)
@@ -370,5 +293,3 @@ finally:
         driver.quit()
     except:
         pass
-
-
