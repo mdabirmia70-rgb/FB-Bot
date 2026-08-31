@@ -62,12 +62,10 @@ def generate_ai_response(user_message, chat_id="default_chat"):
         print("[এরর]: কোনো Gemini API Key পাওয়া যায়নি!")
         return None
 
-    # মডেলের নামসমূহ
+    # অফিশিয়াল এবং সঠিক Gemini মডেল নেম
     models_to_try = [
         "gemini-3.6-flash",
-        "gemini-3.6-flash-lite",
-        "gemini-3.5-flash",
-        "gemini-3.5-flash-lite"
+        "gemini-3.5-flash"
     ]
 
     for _ in range(len(API_KEYS)):
@@ -148,7 +146,6 @@ browser_binary = find_real_browser_binary()
 if browser_binary:
     chrome_options.binary_location = browser_binary
 
-# webdriver-manager ব্যবহার করে ইনস্টল করা Chrome-এর সাথে মানানসই ChromeDriver লোড
 service = Service(ChromeDriverManager().install())
 driver = webdriver.Chrome(service=service, options=chrome_options)
 
@@ -200,23 +197,30 @@ try:
     def send_message(text_to_send):
         try:
             message_box = driver.find_element(By.XPATH, '//div[@role="textbox"]')
+            message_box.click()
+            time.sleep(0.3)
             
-            js_script = """
-            var el = arguments[0];
-            var text = arguments[1];
-            el.focus();
-            document.execCommand('insertText', false, text);
-            """
-            driver.execute_script(js_script, message_box, text_to_send)
-            time.sleep(0.5)
-            
+            # টাইপ করা ও পাঠানোর নির্ভরযোগ্য পদ্ধতি
             actions = ActionChains(driver)
-            actions.send_keys_to_element(message_box, Keys.ENTER)
+            actions.send_keys(text_to_send)
+            actions.pause(0.5)
+            actions.send_keys(Keys.ENTER)
             actions.perform()
+            
             time.sleep(1)
             print(f"[বট উত্তর পাঠিয়েছে]: {text_to_send}")
         except Exception as err:
             try:
+                # ফলব্যাক JS ইনজেকশন
+                js_script = """
+                var el = arguments[0];
+                var text = arguments[1];
+                el.focus();
+                document.execCommand('insertText', false, text);
+                """
+                driver.execute_script(js_script, message_box, text_to_send)
+                time.sleep(0.5)
+                
                 send_btn = driver.find_element(By.XPATH, '//div[@aria-label="Press Enter to send" or @aria-label="Send" or @aria-label="পাঠান"]')
                 send_btn.click()
                 print(f"[বট উত্তর পাঠিয়েছে (Button Click)]: {text_to_send}")
@@ -283,6 +287,8 @@ try:
                     send_message(ai_reply)
                     last_replied_message = raw_msg
                     time.sleep(3)
+                else:
+                    print("[⚠️ AI থেকে কোনো উত্তর পাওয়া যায়নি!]")
 
         except Exception as loop_error:
             print(f"[লুপ এরর]: {loop_error}")
