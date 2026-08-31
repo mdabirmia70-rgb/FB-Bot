@@ -44,7 +44,7 @@ CRITICAL BEHAVIORAL & MEMORY RULES:
    - NEVER admit or hint that you are an AI, bot, or program. Act confused if accused (e.g., "ওমা! এসব কি বলছো? আমি তো সাধারণ মানুষ 😅").
 
 2. STRICT MEMORY & NO REPETITION:
-   - ALWAYS read the provided ongoing conversation history carefully. NEVER repeat what you or the user already said earlier in the chat.
+   - ALWAYS read the ongoing conversation history carefully. NEVER repeat what you or the user already said earlier in the chat.
    - DO NOT repeat the exact same greetings, reactions, or follow-up questions in every message.
    - If the user already answered a question (e.g., "চা খেয়েছো"), do NOT ask it again. Move the conversation forward naturally like a real friend.
 
@@ -62,8 +62,24 @@ def get_current_time_context():
     now = datetime.now(bd_tz)
     return f"(Current Time: {now.strftime('%I:%M %p')})"
 
-# generate_ai_response-এ del chat_sessions[chat_id] মুছে দেওয়া হলো এবং চ্যাট হিস্ট্রি প্রম্পটে যুক্ত করা হলো
-def generate_ai_response(user_message, chat_id="default_chat", recent_history=""):
+# অন-ডিমান্ড হিস্ট্রি রিড ফাংশন (শুধু সেশন ফেল করলে বা নতুন সেশনে কল হবে)
+def fetch_screen_history():
+    try:
+        messages = driver.find_elements(By.XPATH, '//div[@role="row"]//div[@dir="auto"] | //div[@dir="auto"]')
+        if len(messages) > 1:
+            history_elements = messages[-15:-1]
+            recent_history_list = []
+            for el in history_elements:
+                txt = el.text.strip()
+                if txt:
+                    sender = "বট (সামসুন Nahar)" if el.location["x"] > 550 else "ইউজার"
+                    recent_history_list.append(f"{sender}: {txt}")
+            return "\n".join(recent_history_list)
+    except Exception as e:
+        print(f"[হিস্ট্রি রিড এরর]: {e}")
+    return ""
+
+def generate_ai_response(user_message, chat_id="default_chat"):
     global current_key_index
     print(f"-> Gemini AI এর কাছে উত্তর চাওয়া হচ্ছে (চ্যাট ID: {chat_id[-10:]})...")
     
@@ -77,35 +93,43 @@ def generate_ai_response(user_message, chat_id="default_chat", recent_history=""
     ]
 
     time_info = get_current_time_context()
-    
-    # স্ক্রিন থেকে রিড করা চ্যাট হিস্ট্রি AI প্রম্পটে ফিড করা হচ্ছে
-    if recent_history:
-        full_prompt = f"আগের কথোপকথনের প্রসঙ্গ (গত ১০-১৪টি মেসেজ):\n{recent_history}\n\nবর্তমান মেসেজ: {user_message} {time_info}"
-    else:
-        full_prompt = f"{user_message} {time_info}"
 
     for _ in range(len(API_KEYS)):
         current_api_key = API_KEYS[current_key_index]
         
         for model_name in models_to_try:
             try:
-                client = genai.Client(api_key=current_api_key)
-                
+                # নতুন সেশন তৈরি হলে অথবা আগের সেশন ব্রোকেন হলে চ্যাট ব্যাকআপ রিড করা হবে
                 if chat_id not in chat_sessions:
-                    print(f"-> নতুন চ্যাট সেশন তৈরি করা হচ্ছে: {chat_id[-10:]}")
-                    chat_sessions[chat_id] = client.chats.create(
+                    print(f"-> চ্যাট সেশন পাওয়া যায়নি! স্ক্রিন থেকে হিস্ট্রি ব্যাকআপ নেওয়া হচ্ছে...")
+                    recent_history = fetch_screen_history()
+                    
+                    client = genai.Client(api_key=current_api_key)
+                    chat_obj = client.chats.create(
                         model=model_name,
                         config={"system_instruction": SYSTEM_INSTRUCTION}
                     )
-                
+                    
+                    # ব্যাকআপ হিস্ট্রি থাকলে তা দিয়ে সেশন প্রাইম করা
+                    if recent_history:
+                        init_prompt = f"আগের কথোপকথনের চ্যাট ব্যাকআপ হিস্ট্রি:\n{recent_history}\n\nএটি মনে রেখে সামনের চ্যাট চালু রাখো।"
+                        try:
+                            chat_obj.send_message(init_prompt)
+                        except:
+                            pass
+
+                    chat_sessions[chat_id] = chat_obj
+
                 chat = chat_sessions[chat_id]
-                response = chat.send_message(full_prompt)
+                response = chat.send_message(f"{user_message} {time_info}")
                 
                 if response and response.text:
                     return response.text.strip()
             except Exception as e:
                 print(f"[{model_name} এরর - Key {current_key_index + 1}]: {e}")
-                # এরর আসলেও সেশন মুছে ফেলা (del chat_sessions[chat_id]) বাদ দেওয়া হয়েছে
+                # এরর আসলে সেশন ডিলিট হবে যেন পরের ট্রাইতে স্ক্রিন থেকে ব্যাকআপ নিয়ে আবার ফ্রেশ সেশন বানাতে পারে
+                if chat_id in chat_sessions:
+                    del chat_sessions[chat_id]
                 time.sleep(1)
                 continue
         
@@ -311,21 +335,9 @@ try:
                     time.sleep(2)
                     continue
 
-                # স্ক্রিনে থাকা আগের ১০-১৪টি মেসেজের চ্যাট হিস্ট্রি পড়া হচ্ছে
-                history_elements = messages[-15:-1]
-                recent_history_list = []
-                for el in history_elements:
-                    txt = el.text.strip()
-                    if txt:
-                        # মেসেজের এক্স-পজিশন দিয়ে ইউজার এবং বটের মেসেজ আলাদা শনাক্তকরণ
-                        sender = "বট (সামসুন Nahar)" if el.location["x"] > 550 else "ইউজার"
-                        recent_history_list.append(f"{sender}: {txt}")
-                
-                recent_history = "\n".join(recent_history_list)
-
                 print(f"\n[নতুন মেসেজ রিসিভড (ID: {current_chat_id})]: {raw_msg}")
 
-                ai_reply = generate_ai_response(raw_msg, chat_id=current_chat_id, recent_history=recent_history)
+                ai_reply = generate_ai_response(raw_msg, chat_id=current_chat_id)
                 if ai_reply:
                     send_message(ai_reply)
                     last_replied_message = raw_msg
