@@ -202,31 +202,50 @@ try:
 
     handle_pin_popup()
 
+    # ডাইনামিক টাইপিং ডিলেসহ মেসেজ পাঠানোর ফাংশন
     def send_message(text_to_send):
         try:
+            msg_length = len(text_to_send)
+            
+            # ১. মেসেজের দৈঘ্য অনুযায়ী টাইপিং স্পিড এবং মেসেজ পড়ার প্রাথমিক বিরতি নির্ধারণ
+            if msg_length <= 15:
+                # ছোট মেসেজের জন্য ১-২ সেকেন্ড বিরতি
+                initial_think_delay = random.uniform(1.0, 2.0)
+                char_delay_min, char_delay_max = 0.03, 0.06
+            elif msg_length <= 50:
+                # মাঝারি মেসেজের জন্য ২-৩.৫ সেকেন্ড বিরতি
+                initial_think_delay = random.uniform(2.0, 3.5)
+                char_delay_min, char_delay_max = 0.04, 0.08
+            else:
+                # বড় মেসেজের জন্য ৩.৫-৫ সেকেন্ড বিরতি
+                initial_think_delay = random.uniform(3.5, 5.0)
+                char_delay_min, char_delay_max = 0.05, 0.10
+
+            time.sleep(initial_think_delay)
+
             message_box = driver.find_element(By.XPATH, '//div[@role="textbox"]')
             message_box.click()
             time.sleep(0.3)
 
-            print("-> টাইপিং শুরু হচ্ছে (Typing Indicator)...")
+            print(f"-> ডাইনামিক টাইপিং শুরু হচ্ছে ({msg_length} টি অক্ষর)...")
             
             lines = [line for line in text_to_send.split("\n") if line.strip()]
             for line_idx, line in enumerate(lines):
-                # প্রতি অক্ষর টাইপ করার সময় রিয়েল-টাইম typing... ইফেক্ট
                 for char in line:
                     actions = ActionChains(driver)
                     actions.send_keys(char)
                     actions.perform()
-                    time.sleep(random.uniform(0.04, 0.08))
+                    time.sleep(random.uniform(char_delay_min, char_delay_max))
 
                 if line_idx < len(lines) - 1:
                     actions = ActionChains(driver)
                     actions.key_down(Keys.SHIFT).send_keys(Keys.ENTER).key_up(Keys.SHIFT).perform()
-                    time.sleep(random.uniform(0.3, 0.6))
+                    time.sleep(random.uniform(0.3, 0.7))
 
-            # টাইপিং শেষ হওয়ার পর ঠিক ২ সেকেন্ড অপেক্ষা করে পাঠাবে
-            print("-> টাইপিং শেষ, ২ সেকেন্ড পর সেন্ড করা হচ্ছে...")
-            time.sleep(2)
+            # ২. টাইপিং শেষ হওয়ার পর মানুষের মতো ২ থেকে ৪ সেকেন্ডের মধ্যে র্যান্ডম সময়ে সেন্ড করা
+            send_delay = random.uniform(2.0, 3.8)
+            print(f"-> টাইপিং শেষ, {send_delay:.1f} সেকেন্ড পর সেন্ড করা হচ্ছে...")
+            time.sleep(send_delay)
 
             actions = ActionChains(driver)
             actions.send_keys(Keys.ENTER)
