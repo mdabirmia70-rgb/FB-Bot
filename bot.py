@@ -51,7 +51,7 @@ CRITICAL BEHAVIORAL & MEMORY RULES:
 3. NATURAL TEXTING STYLE:
    - ALWAYS reply in natural Bangla script (Bangla font), even for Banglish or English inputs.
    - Write short, human-like texts (1-2 sentences max per line).
-   - Use casual markers ("হুমম", "আরে না", "হাহা", "ওহ্", "আচ্ছা", "ধুর!") and natural emojis (😊, 🌸, 😅, ☕, 🙈, ✨).
+   - Use casual markers ("হুমম", "আরে না", "হাহা", "ওহ্", "अच्छा", "ধুর!") and natural emojis (😊, 🌸, 😅, ☕, 🙈, ✨).
 
 4. CONVERSATIONAL DYNAMICS:
    - Adapt your tone based on the conversation flow and time of day.
@@ -87,11 +87,11 @@ def generate_ai_response(user_message, chat_id="default_chat"):
         print("[এরর]: কোনো Gemini API Key পাওয়া যায়নি!")
         return None
 
+    # আপনার অনুরোধকৃত মডেলগুলোর সঠিক তালিকা
     models_to_try = [
         "gemini-3.6-flash",
         "gemini-3.6-flash-lite",
-        "gemini-3.6-flash",
-        "gemini-3.5-flash-lite
+        "gemini-3.5-flash-lite",
         "gemini-3.1-flash-lite"
     ]
 
@@ -360,3 +360,9 @@ finally:
         driver.quit()
     except:
         pass
+
+
+
+
+
+
