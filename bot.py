@@ -239,8 +239,9 @@ try:
             for chunk in message_chunks:
                 msg_length = len(chunk)
                 
-                initial_think_delay = random.uniform(1.0, 2.0)
-                char_delay_min, char_delay_max = 0.03, 0.06
+                # 20-25 WPM টাইপিং স্পিডের জন্য অক্ষর প্রতি 0.24 থেকে 0.30 সেকেন্ড বিলম্ব
+                char_delay_min, char_delay_max = 0.24, 0.30
+                initial_think_delay = random.uniform(1.2, 2.5)
 
                 time.sleep(initial_think_delay)
 
@@ -248,7 +249,7 @@ try:
                 message_box.click()
                 time.sleep(0.3)
 
-                print(f"-> টাইপিং শুরু হচ্ছে ({msg_length} টি অক্ষর)...")
+                print(f"-> ডাইনামিক টাইপিং (20-25 WPM) শুরু হচ্ছে ({msg_length} টি অক্ষর)...")
                 
                 chunk_lines = chunk.split("\n")
                 for line_idx, line in enumerate(chunk_lines):
@@ -256,12 +257,13 @@ try:
                         actions = ActionChains(driver)
                         actions.send_keys(char)
                         actions.perform()
+                        # ২০-২৫ WPM স্পিডে প্রতি অক্ষরের মাঝে বিরতি
                         time.sleep(random.uniform(char_delay_min, char_delay_max))
 
                     if line_idx < len(chunk_lines) - 1:
                         actions = ActionChains(driver)
                         actions.key_down(Keys.SHIFT).send_keys(Keys.ENTER).key_up(Keys.SHIFT).perform()
-                        time.sleep(random.uniform(0.3, 0.5))
+                        time.sleep(random.uniform(0.3, 0.6))
 
                 send_delay = random.uniform(1.0, 2.0)
                 time.sleep(send_delay)
@@ -271,10 +273,10 @@ try:
                 actions.perform()
                 
                 print(f"[বট উত্তর পাঠিয়েছে]: {chunk}")
-                time.sleep(random.uniform(1.0, 2.5)) # পরের পার্ট পাঠানোর আগে ২ সেকেন্ড বিরতি
+                time.sleep(random.uniform(1.2, 2.5)) # পরের পার্ট পাঠানোর আগে বিরতি
 
         except Exception as err:
-            print(f"[মেসেজ পাঠাতে समस्या]: {err}")
+            print(f"[মেসেজ পাঠাতে সমস্যা]: {err}")
 
     def get_chat_unique_id():
         try:
