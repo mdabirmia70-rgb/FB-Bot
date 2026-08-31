@@ -48,10 +48,10 @@ CRITICAL BEHAVIORAL & MEMORY RULES:
    - DO NOT repeat the exact same greetings, reactions, or follow-up questions in every message.
    - If the user already answered a question (e.g., "চা খেয়েছো"), do NOT ask it again. Move the conversation forward naturally like a real friend.
 
-3. NATURAL TEXTING STYLE:
+3. EXTREMELY SHORT & NATURAL TEXTING STYLE (STRICT RULE):
+   - NEVER write long paragraphs. Keep replies short and human-like (MAXIMUM 1 to 2 short lines).
    - ALWAYS reply in natural Bangla script (Bangla font), even for Banglish or English inputs.
-   - Write short, human-like texts (1-2 sentences max per line).
-   - Use casual markers ("হুমম", "আরে না", "হাহা", "ওহ্", "अच्छा", "ধুর!") and natural emojis (😊, 🌸, 😅, ☕, 🙈, ✨).
+   - Use casual markers ("হুমম", "আরে না", "হাহা", "ওহ্", "আচ্ছা", "ধুর!") and natural emojis (😊, 🌸, 😅, ☕, 🙈, ✨).
 
 4. CONVERSATIONAL DYNAMICS:
    - Adapt your tone based on the conversation flow and time of day.
@@ -87,12 +87,11 @@ def generate_ai_response(user_message, chat_id="default_chat"):
         print("[এরর]: কোনো Gemini API Key পাওয়া যায়নি!")
         return None
 
-    # আপনার অনুরোধকৃত মডেলগুলোর সঠিক তালিকা
     models_to_try = [
         "gemini-3.6-flash",
         "gemini-3.6-flash-lite",
-        "gemini-3.5-flash",
-        "gemini-3.5-flash-lite"
+        "gemini-3.5-flash-lite",
+        "gemini-3.1-flash-lite"
     ]
 
     time_info = get_current_time_context()
@@ -102,7 +101,6 @@ def generate_ai_response(user_message, chat_id="default_chat"):
         
         for model_name in models_to_try:
             try:
-                # নতুন সেশন তৈরি হলে অথবা আগের সেশন ব্রোকেন হলে চ্যাট ব্যাকআপ রিড করা হবে
                 if chat_id not in chat_sessions:
                     print(f"-> চ্যাট সেশন পাওয়া যায়নি! স্ক্রিন থেকে হিস্ট্রি ব্যাকআপ নেওয়া হচ্ছে...")
                     recent_history = fetch_screen_history()
@@ -113,7 +111,6 @@ def generate_ai_response(user_message, chat_id="default_chat"):
                         config={"system_instruction": SYSTEM_INSTRUCTION}
                     )
                     
-                    # ব্যাকআপ হিস্ট্রি থাকলে তা দিয়ে সেশন প্রাইম করা
                     if recent_history:
                         init_prompt = f"আগের কথোপকথনের চ্যাট ব্যাকআপ হিস্ট্রি:\n{recent_history}\n\nএটি মনে রেখে সামনের চ্যাট চালু রাখো।"
                         try:
@@ -130,7 +127,6 @@ def generate_ai_response(user_message, chat_id="default_chat"):
                     return response.text.strip()
             except Exception as e:
                 print(f"[{model_name} এরর - Key {current_key_index + 1}]: {e}")
-                # এরর আসলে সেশন ডিলিট হবে যেন পরের ট্রাইতে স্ক্রিন থেকে ব্যাকআপ নিয়ে আবার ফ্রেশ সেশন বানাতে পারে
                 if chat_id in chat_sessions:
                     del chat_sessions[chat_id]
                 time.sleep(1)
@@ -233,50 +229,52 @@ try:
 
     def send_message(text_to_send):
         try:
-            msg_length = len(text_to_send)
+            # লেখাগুলোকে ছোট ছোট পার্টে (২-৩ লাইন) ভাগ করে পাঠানো
+            lines = [line.strip() for line in text_to_send.split("\n") if line.strip()]
             
-            if msg_length <= 15:
+            # প্রতি ২টি লাইন পর পর আলাদা মেসেজ হিসেবে পাঠানো হবে
+            chunk_size = 2
+            message_chunks = ["\n".join(lines[i:i + chunk_size]) for i in range(0, len(lines), chunk_size)]
+
+            for chunk in message_chunks:
+                msg_length = len(chunk)
+                
                 initial_think_delay = random.uniform(1.0, 2.0)
                 char_delay_min, char_delay_max = 0.03, 0.06
-            elif msg_length <= 50:
-                initial_think_delay = random.uniform(2.0, 3.5)
-                char_delay_min, char_delay_max = 0.04, 0.08
-            else:
-                initial_think_delay = random.uniform(3.5, 5.0)
-                char_delay_min, char_delay_max = 0.05, 0.10
 
-            time.sleep(initial_think_delay)
+                time.sleep(initial_think_delay)
 
-            message_box = driver.find_element(By.XPATH, '//div[@role="textbox"]')
-            message_box.click()
-            time.sleep(0.3)
+                message_box = driver.find_element(By.XPATH, '//div[@role="textbox"]')
+                message_box.click()
+                time.sleep(0.3)
 
-            print(f"-> ডাইনামিক টাইপিং শুরু হচ্ছে ({msg_length} টি অক্ষর)...")
-            
-            lines = [line for line in text_to_send.split("\n") if line.strip()]
-            for line_idx, line in enumerate(lines):
-                for char in line:
-                    actions = ActionChains(driver)
-                    actions.send_keys(char)
-                    actions.perform()
-                    time.sleep(random.uniform(char_delay_min, char_delay_max))
+                print(f"-> টাইপিং শুরু হচ্ছে ({msg_length} টি অক্ষর)...")
+                
+                chunk_lines = chunk.split("\n")
+                for line_idx, line in enumerate(chunk_lines):
+                    for char in line:
+                        actions = ActionChains(driver)
+                        actions.send_keys(char)
+                        actions.perform()
+                        time.sleep(random.uniform(char_delay_min, char_delay_max))
 
-                if line_idx < len(lines) - 1:
-                    actions = ActionChains(driver)
-                    actions.key_down(Keys.SHIFT).send_keys(Keys.ENTER).key_up(Keys.SHIFT).perform()
-                    time.sleep(random.uniform(0.3, 0.7))
+                    if line_idx < len(chunk_lines) - 1:
+                        actions = ActionChains(driver)
+                        actions.key_down(Keys.SHIFT).send_keys(Keys.ENTER).key_up(Keys.SHIFT).perform()
+                        time.sleep(random.uniform(0.3, 0.5))
 
-            send_delay = random.uniform(2.0, 3.8)
-            print(f"-> টাইপিং শেষ, {send_delay:.1f} সেকেন্ড পর সেন্ড করা হচ্ছে...")
-            time.sleep(send_delay)
+                send_delay = random.uniform(1.0, 2.0)
+                time.sleep(send_delay)
 
-            actions = ActionChains(driver)
-            actions.send_keys(Keys.ENTER)
-            actions.perform()
-            
-            print(f"[বট উত্তর পাঠিয়েছে]: {text_to_send}")
+                actions = ActionChains(driver)
+                actions.send_keys(Keys.ENTER)
+                actions.perform()
+                
+                print(f"[বট উত্তর পাঠিয়েছে]: {chunk}")
+                time.sleep(random.uniform(1.0, 2.5)) # পরের পার্ট পাঠানোর আগে ২ সেকেন্ড বিরতি
+
         except Exception as err:
-            print(f"[মেসেজ পাঠাতে সমস্যা]: {err}")
+            print(f"[মেসেজ পাঠাতে समस्या]: {err}")
 
     def get_chat_unique_id():
         try:
@@ -360,9 +358,3 @@ finally:
         driver.quit()
     except:
         pass
-
-
-
-
-
-
