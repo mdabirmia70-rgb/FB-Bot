@@ -71,6 +71,46 @@ def send_telegram_alert(message):
         except Exception as e:
             print(f"[টেলিগ্রাম নোটিফিকেশন এরর]: {e}")
 
+def get_telegram_reply(user_msg):
+    """সবগুলো API ফেল করলে টেলিগ্রামে অ্যালার্ট পাঠাবে এবং ১২০ সেকেন্ড অপেক্ষা করবে"""
+    if not (TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID):
+        return None
+
+    prompt_text = f"🚨 [API Limit / Busy Alert]\n\nইউজার মেসেজ পাঠিয়েছে:\n\"{user_msg}\"\n\nদয়া করে ১২০ সেকেন্ডের (২ মিনিট) মধ্যে রিপ্লাই দিন।"
+    send_telegram_alert(prompt_text)
+
+    try:
+        url_updates = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
+        res = requests.get(url_updates).json()
+        last_update_id = 0
+        if res.get("ok") and res.get("result"):
+            last_update_id = res["result"][-1]["update_id"]
+    except:
+        last_update_id = 0
+
+    print("-> টেলিগ্রাম থেকে ম্যানুয়াল উত্তরের জন্য ১২০ সেকেন্ড অপেক্ষা করা হচ্ছে...")
+
+    start_wait = time.time()
+    while time.time() - start_wait < 120:
+        try:
+            res = requests.get(f"{url_updates}?offset={last_update_id + 1}&timeout=5").json()
+            if res.get("ok") and res.get("result"):
+                for update in res["result"]:
+                    last_update_id = update["update_id"]
+                    msg = update.get("message", {})
+                    if str(msg.get("chat", {}).get("id")) == str(TELEGRAM_CHAT_ID) and "text" in msg:
+                        manual_reply = msg["text"].strip()
+                        print(f"[✅ টেলিগ্রাম থেকে উত্তর পাওয়া গেছে]: {manual_reply}")
+                        send_telegram_alert("👍 ম্যানুয়াল উত্তর রিসিভড! মেসেঞ্জারে পাঠানো হচ্ছে...")
+                        return manual_reply
+        except Exception as e:
+            print(f"[টেলিগ্রাম ওয়েট এরর]: {e}")
+        time.sleep(2)
+
+    print("[⏰ ১২০ সেকেন্ড শেষ! কোনো রিপ্লাই না পাওয়ায় আবার API-তে ট্রাই করা হচ্ছে...]")
+    send_telegram_alert("⏰ সময় শেষ! টেলিগ্রাম থেকে উত্তর না পাওয়ায় পুনরায় Gemini API চেষ্টা করা হচ্ছে...")
+    return None
+
 def get_current_time_context():
     bd_tz = timezone(timedelta(hours=6))
     now = datetime.now(bd_tz)
@@ -92,14 +132,10 @@ def fetch_screen_history():
         print(f"[হিস্ট্রি রিড এরর]: {e}")
     return ""
 
-def generate_ai_response(user_message, chat_id="default_chat"):
+def generate_ai_response(user_message, chat_id="default_chat", attempt_count=1):
     global current_key_index
-    print(f"-> Gemini AI এর কাছে উত্তর চাওয়া হচ্ছে (চ্যাট ID: {chat_id[-10:]})...")
+    print(f"-> Gemini AI এর কাছে উত্তর চাওয়া হচ্ছে (চ্যাট ID: {chat_id[-10:]}, Attempt: {attempt_count})...")
     
-    if not API_KEYS:
-        print("[এরর]: কোনো Gemini API Key পাওয়া যায়নি!")
-        return None
-
     models_to_try = [
         "gemini-3.6-flash",
         "gemini-3.6-flash-lite",
@@ -109,46 +145,55 @@ def generate_ai_response(user_message, chat_id="default_chat"):
 
     time_info = get_current_time_context()
 
-    for _ in range(len(API_KEYS)):
-        current_api_key = API_KEYS[current_key_index]
-        
-        for model_name in models_to_try:
-            try:
-                if chat_id not in chat_sessions:
-                    print(f"-> চ্যাট সেশন পাওয়া যায়নি! স্ক্রিন থেকে হিস্ট্রি ব্যাকআপ নেওয়া হচ্ছে...")
-                    recent_history = fetch_screen_history()
-                    
-                    client = genai.Client(api_key=current_api_key)
-                    chat_obj = client.chats.create(
-                        model=model_name,
-                        config={"system_instruction": SYSTEM_INSTRUCTION}
-                    )
-                    
-                    if recent_history:
-                        init_prompt = f"আগের কথোপকথনের চ্যাট ব্যাকআপ হিস্ট্রি:\n{recent_history}\n\nএটি মনে রেখে সামনের চ্যাট চালু রাখো।"
-                        try:
-                            chat_obj.send_message(init_prompt)
-                        except:
-                            pass
-
-                    chat_sessions[chat_id] = chat_obj
-
-                chat = chat_sessions[chat_id]
-                response = chat.send_message(f"{user_message} {time_info}")
+    # ১. বার বার সব API Key চেক করার চেষ্টা (২ রাউন্ড সম্পূর্ণ চেক করবে)
+    if API_KEYS:
+        for round_idx in range(2): 
+            for _ in range(len(API_KEYS)):
+                current_api_key = API_KEYS[current_key_index]
                 
-                if response and response.text:
-                    return response.text.strip()
-            except Exception as e:
-                print(f"[{model_name} এরর - Key {current_key_index + 1}]: {e}")
-                if chat_id in chat_sessions:
-                    del chat_sessions[chat_id]
-                time.sleep(1)
-                continue
-        
-        current_key_index = (current_key_index + 1) % len(API_KEYS)
-        print(f"-> Key {current_key_index + 1}-এ সুইচ করা হচ্ছে...")
+                for model_name in models_to_try:
+                    try:
+                        if chat_id not in chat_sessions:
+                            recent_history = fetch_screen_history()
+                            
+                            client = genai.Client(api_key=current_api_key)
+                            chat_obj = client.chats.create(
+                                model=model_name,
+                                config={"system_instruction": SYSTEM_INSTRUCTION}
+                            )
+                            
+                            if recent_history:
+                                try:
+                                    chat_obj.send_message(f"আগের কথোপকথন:\n{recent_history}\n\nএটি মনে রেখে সামনের চ্যাট চালু রাখো।")
+                                except:
+                                    pass
 
-    return None
+                            chat_sessions[chat_id] = chat_obj
+
+                        chat = chat_sessions[chat_id]
+                        response = chat.send_message(f"{user_message} {time_info}")
+                        
+                        if response and response.text:
+                            return response.text.strip()
+                    except Exception as e:
+                        print(f"[{model_name} এরর - Key {current_key_index + 1}]: {e}")
+                        if chat_id in chat_sessions:
+                            del chat_sessions[chat_id]
+                        time.sleep(0.5)
+                        continue
+                
+                current_key_index = (current_key_index + 1) % len(API_KEYS)
+
+    # ২. বার বার চেষ্টার পরেও API কাজ না করলে টেলিগ্রামে পাঠানো হবে
+    print(f"[⚠️ সব API Key বিজি/লিমিট শেষ! (লুপ {attempt_count})]")
+    telegram_reply = get_telegram_reply(user_message)
+    
+    if telegram_reply:
+        return telegram_reply
+    else:
+        # ৩. টেলিগ্রামে ১২০ সেকেন্ডে উত্তর না দিলে আবার Gemini API-কে কল করবে (পুনরায় চেষ্টা)
+        time.sleep(2)
+        return generate_ai_response(user_message, chat_id=chat_id, attempt_count=attempt_count+1)
 
 def inject_cookies(driver, c_user, xs_token):
     driver.get("https://www.facebook.com")
@@ -375,7 +420,7 @@ try:
                     last_replied_message = raw_msg
                     time.sleep(2)
                 else:
-                    print("[⚠️ AI থেকে কোনো উত্তর পাওয়া যায়নি!]")
+                    print("[⚠️ উত্তর পাওয়া যায়নি!]")
 
         except Exception as loop_error:
             print(f"[লুপ এরর]: {loop_error}")
