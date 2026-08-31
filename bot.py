@@ -4,6 +4,7 @@ import shutil
 import sys
 import time
 import random
+import requests
 from datetime import datetime, timezone, timedelta
 from google import genai
 from dotenv import load_dotenv
@@ -33,6 +34,8 @@ current_key_index = 0
 FB_C_USER = os.getenv("FB_C_USER")
 FB_XS_TOKEN = os.getenv("FB_XS_TOKEN")
 E2EE_PIN = os.getenv("E2EE_PIN")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 chat_sessions = {}
 
@@ -58,12 +61,21 @@ CRITICAL BEHAVIORAL & MEMORY RULES:
    - Adapt your tone based on the conversation flow and time of day.
    - If asked complex/technical questions, act like a regular non-tech girl (e.g., "ওমা! এতো কঠিন জিনিস আমি বুঝি না গো 😅")."""
 
+def send_telegram_alert(message):
+    if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
+        try:
+            url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+            payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message}
+            requests.post(url, json=payload)
+            print("[✅ টেলিগ্রামে সতর্কবার্তা পাঠানো হয়েছে!]")
+        except Exception as e:
+            print(f"[টেলিগ্রাম নোটিফিকেশন এরর]: {e}")
+
 def get_current_time_context():
     bd_tz = timezone(timedelta(hours=6))
     now = datetime.now(bd_tz)
     return f"(Current Time: {now.strftime('%I:%M %p')})"
 
-# অন-ডিমান্ড হিস্ট্রি রিড ফাংশন
 def fetch_screen_history():
     try:
         messages = driver.find_elements(By.XPATH, '//div[@role="row"]//div[@dir="auto"] | //div[@dir="auto"]')
@@ -195,7 +207,9 @@ try:
     time.sleep(6)
 
     if "login" in driver.current_url or len(driver.find_elements(By.XPATH, '//div[@role="textbox"] | //div[@role="gridcell"]')) == 0:
-        print("\n[⚠️ কুকিজের মেয়াদ শেষ বা লগইন ব্যর্থ হয়েছে!]")
+        alert_msg = "⚠️ [FB Bot Alert] কুকিজের মেয়াদ শেষ বা লগইন ব্যর্থ হয়েছে!\nদয়া করে GitHub Secrets-এ নতুন কুকিজ আপডেট করে Workflow পুনরায় রান দিন।"
+        print(f"\n[{alert_msg}]")
+        send_telegram_alert(alert_msg)
         sys.exit(1)
 
     def handle_pin_popup():
@@ -230,7 +244,6 @@ try:
 
     def send_message(text_to_send):
         try:
-            # সর্বোচ্চ ১৩০ অক্ষরে মেসেজ টুকরো (Chunk) করা
             MAX_CHUNK_LIMIT = 130
             message_chunks = []
 
@@ -244,7 +257,6 @@ try:
                     if current_chunk:
                         message_chunks.append(current_chunk)
                     
-                    # কোনো একটা একক লাইনই যদি ১৩০ অক্ষরের চেয়ে বড় হয়
                     while len(line) > MAX_CHUNK_LIMIT:
                         split_pos = line.rfind(" ", 0, MAX_CHUNK_LIMIT)
                         if split_pos == -1:
@@ -258,8 +270,6 @@ try:
 
             for chunk in message_chunks:
                 msg_length = len(chunk)
-                
-                # 20-25 WPM স্পিডের জন্য (অক্ষর প্রতি 0.24-0.30 সেক)
                 char_delay_min, char_delay_max = 0.24, 0.30
                 initial_think_delay = random.uniform(1.0, 2.0)
 
@@ -269,7 +279,7 @@ try:
                 message_box.click()
                 time.sleep(0.3)
 
-                print(f"-> টাইপিং শুরু হচ্ছে ({msg_length} টি অক্ষর)...")
+                print(f"-> টাইপিং (20-25 WPM) শুরু হচ্ছে ({msg_length} টি অক্ষর)...")
                 
                 chunk_lines = chunk.split("\n")
                 for line_idx, line in enumerate(chunk_lines):
@@ -373,7 +383,9 @@ try:
         time.sleep(2)
 
 except Exception as e:
-    print(f"[প্রধান এরর]: {e}")
+    err_msg = f"⚠️ [FB Bot Error]: {e}"
+    print(f"[{err_msg}]")
+    send_telegram_alert(err_msg)
 finally:
     try:
         driver.quit()
