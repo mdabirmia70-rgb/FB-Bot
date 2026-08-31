@@ -91,8 +91,8 @@ def generate_ai_response(user_message, chat_id="default_chat"):
     models_to_try = [
         "gemini-3.6-flash",
         "gemini-3.6-flash-lite",
-        "gemini-3.5-flash-lite",
-        "gemini-3.1-flash-lite"
+        "gemini-3.5-flash",
+        "gemini-3.5-flash-lite"
     ]
 
     time_info = get_current_time_context()
