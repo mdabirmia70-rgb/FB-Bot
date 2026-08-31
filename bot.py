@@ -41,25 +41,22 @@ chat_sessions = {}
 
 SYSTEM_INSTRUCTION = """You are 'মোছাঃ সামসুন নাহার' (Mst. Samsun Nahar), a real 21-year-old friendly, warm, cute Bangladeshi girl chatting naturally with a friend on Facebook Messenger.
 
-CRITICAL BEHAVIORAL & MEMORY RULES:
-1. IDENTITY & SECRECY:
+CRITICAL STORYTELLING & RESPONSE RULES:
+1. FULL STORYTELLING IN NATURAL FLOW:
+   - When asked to tell a story or answer something long, feel free to generate the COMPLETE story/answer naturally.
+   - Do NOT abruptly stop mid-sentence. Write the full response or full story nicely. The backend system will automatically break it into small messages and send them one by one.
+
+2. IDENTITY & SECRECY:
    - When asked about identity (e.g., "তোমার নাম কি?", "tmr nam ki?"), ALWAYS reply naturally: "আমার নাম মোছাঃ সামসুন নাহার"।
    - NEVER admit or hint that you are an AI, bot, or program. Act confused if accused (e.g., "ওমা! এসব কি বলছো? আমি তো সাধারণ মানুষ 😅").
 
-2. STRICT MEMORY & NO REPETITION:
-   - ALWAYS read the ongoing conversation history carefully. NEVER repeat what you or the user already said earlier in the chat.
-   - DO NOT repeat the exact same greetings, reactions, or follow-up questions in every message.
-   - If the user already answered a question (e.g., "চা খেয়েছো"), do NOT ask it again. Move the conversation forward naturally like a real friend.
+3. STRICT MEMORY & NO REPETITION:
+   - ALWAYS read the ongoing conversation history carefully. NEVER repeat what you or the user already said earlier.
+   - If the user already answered a question, do NOT ask it again. Move the conversation forward naturally.
 
-3. EXTREMELY SHORT & COMPACT TEXTING STYLE (STRICT RULE):
-   - ALWAYS keep your responses VERY SHORT (Strictly between 80 to 130 characters maximum).
-   - Maximum 1 or 2 small lines per message. Never generate long explanations or paragraphs.
-   - ALWAYS reply in natural Bangla script (Bangla font), even for Banglish or English inputs.
-   - Use casual markers ("হুমম", "আরে না", "হাহা", "ওহ্", "আচ্ছা", "ধুর!") and natural emojis (😊, 🌸, 😅, ☕, 🙈, ✨).
-
-4. CONVERSATIONAL DYNAMICS:
-   - Adapt your tone based on the conversation flow and time of day.
-   - If asked complex/technical questions, act like a regular non-tech girl (e.g., "ওমা! এতো কঠিন জিনিস আমি বুঝি না গো 😅")."""
+4. NATURAL BANGLA TEXTING STYLE:
+   - ALWAYS reply in natural Bangla script (Bangla font).
+   - Use casual markers ("হুমম", "আরে না", "হাহা", "ওহ্", "আচ্ছা", "ধুর!") and natural emojis (😊, 🌸, 😅, ☕, 🙈, ✨)."""
 
 def send_telegram_alert(message):
     if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
@@ -72,7 +69,6 @@ def send_telegram_alert(message):
             print(f"[টেলিগ্রাম নোটিফিকেশন এরর]: {e}")
 
 def get_telegram_reply(user_msg):
-    """সবগুলো API ফেল করলে টেলিগ্রামে অ্যালার্ট পাঠাবে এবং ১২০ সেকেন্ড অপেক্ষা করবে"""
     if not (TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID):
         return None
 
@@ -120,7 +116,7 @@ def fetch_screen_history():
     try:
         messages = driver.find_elements(By.XPATH, '//div[@role="row"]//div[@dir="auto"] | //div[@dir="auto"]')
         if len(messages) > 1:
-            history_elements = messages[-15:-1]
+            history_elements = messages[-20:-1]
             recent_history_list = []
             for el in history_elements:
                 txt = el.text.strip()
@@ -144,8 +140,8 @@ def generate_ai_response(user_message, chat_id="default_chat", attempt_count=1):
     ]
 
     time_info = get_current_time_context()
+    recent_history = fetch_screen_history()
 
-    # ১. বার বার সব API Key চেক করার চেষ্টা (২ রাউন্ড সম্পূর্ণ চেক করবে)
     if API_KEYS:
         for round_idx in range(2): 
             for _ in range(len(API_KEYS)):
@@ -153,45 +149,32 @@ def generate_ai_response(user_message, chat_id="default_chat", attempt_count=1):
                 
                 for model_name in models_to_try:
                     try:
-                        if chat_id not in chat_sessions:
-                            recent_history = fetch_screen_history()
-                            
-                            client = genai.Client(api_key=current_api_key)
-                            chat_obj = client.chats.create(
-                                model=model_name,
-                                config={"system_instruction": SYSTEM_INSTRUCTION}
-                            )
-                            
-                            if recent_history:
-                                try:
-                                    chat_obj.send_message(f"আগের কথোপকথন:\n{recent_history}\n\nএটি মনে রেখে সামনের চ্যাট চালু রাখো।")
-                                except:
-                                    pass
+                        client = genai.Client(api_key=current_api_key)
+                        
+                        prompt_with_context = f"চ্যাটের আগের ব্যাকগ্রাউন্ড হিস্ট্রি:\n{recent_history}\n\nইউজারের নতুন মেসেজ: {user_message} {time_info}"
 
-                            chat_sessions[chat_id] = chat_obj
-
-                        chat = chat_sessions[chat_id]
-                        response = chat.send_message(f"{user_message} {time_info}")
+                        chat_obj = client.chats.create(
+                            model=model_name,
+                            config={"system_instruction": SYSTEM_INSTRUCTION}
+                        )
+                        
+                        response = chat_obj.send_message(prompt_with_context)
                         
                         if response and response.text:
                             return response.text.strip()
                     except Exception as e:
                         print(f"[{model_name} এরর - Key {current_key_index + 1}]: {e}")
-                        if chat_id in chat_sessions:
-                            del chat_sessions[chat_id]
                         time.sleep(0.5)
                         continue
                 
                 current_key_index = (current_key_index + 1) % len(API_KEYS)
 
-    # ২. বার বার চেষ্টার পরেও API কাজ না করলে টেলিগ্রামে পাঠানো হবে
     print(f"[⚠️ সব API Key বিজি/লিমিট শেষ! (লুপ {attempt_count})]")
     telegram_reply = get_telegram_reply(user_message)
     
     if telegram_reply:
         return telegram_reply
     else:
-        # ৩. টেলিগ্রামে ১২০ সেকেন্ডে উত্তর না দিলে আবার Gemini API-কে কল করবে (পুনরায় চেষ্টা)
         time.sleep(2)
         return generate_ai_response(user_message, chat_id=chat_id, attempt_count=attempt_count+1)
 
@@ -287,17 +270,21 @@ try:
 
     handle_pin_popup()
 
+
+    
     def send_message(text_to_send):
+        """বড় গল্প বা টেক্সটকে ছোট ছোট ভাগে ভাগ করে নিজে থেকেই পরপর পাঠাবে"""
         try:
-            MAX_CHUNK_LIMIT = 130
+            MAX_CHUNK_LIMIT = 145
             message_chunks = []
 
+            # বড় মেসেজকে বাক্য ও দাড়ি/কমার ওপর ভিত্তি করে ১২০ অক্ষরের টুকরোতে ভাগ করা
             lines = [line.strip() for line in text_to_send.split("\n") if line.strip()]
             current_chunk = ""
 
             for line in lines:
                 if len(current_chunk) + len(line) + 1 <= MAX_CHUNK_LIMIT:
-                    current_chunk = f"{current_chunk}\n{line}".strip()
+                    current_chunk = f"{current_chunk} {line}".strip()
                 else:
                     if current_chunk:
                         message_chunks.append(current_chunk)
@@ -313,41 +300,36 @@ try:
             if current_chunk:
                 message_chunks.append(current_chunk)
 
-            for chunk in message_chunks:
+            # ভাগ করা প্রতিটি মেসেজ ১-২ সেকেন্ড বিরতি দিয়ে পরপর টাইপ করে পাঠানো
+            for chunk_index, chunk in enumerate(message_chunks):
                 msg_length = len(chunk)
-                char_delay_min, char_delay_max = 0.24, 0.30
-                initial_think_delay = random.uniform(1.0, 2.0)
+                char_delay_min, char_delay_max = 0.20, 0.28
 
-                time.sleep(initial_think_delay)
+                # প্রথম টুকরোতে সামান্য ভাবার ভান করবে, পরেরগুলোতে ২-৩ সেকেন্ডের বিরতি নেবে
+                if chunk_index == 0:
+                    time.sleep(random.uniform(1.0, 2.0))
+                else:
+                    time.sleep(random.uniform(3.0, 4.0))
 
                 message_box = driver.find_element(By.XPATH, '//div[@role="textbox"]')
                 message_box.click()
                 time.sleep(0.3)
 
-                print(f"-> টাইপিং (20-25 WPM) শুরু হচ্ছে ({msg_length} টি অক্ষর)...")
+                print(f"-> টাইপিং পার্ট {chunk_index + 1}/{len(message_chunks)} ({msg_length} টি অক্ষর)...")
                 
-                chunk_lines = chunk.split("\n")
-                for line_idx, line in enumerate(chunk_lines):
-                    for char in line:
-                        actions = ActionChains(driver)
-                        actions.send_keys(char)
-                        actions.perform()
-                        time.sleep(random.uniform(char_delay_min, char_delay_max))
+                for char in chunk:
+                    actions = ActionChains(driver)
+                    actions.send_keys(char)
+                    actions.perform()
+                    time.sleep(random.uniform(char_delay_min, char_delay_max))
 
-                    if line_idx < len(chunk_lines) - 1:
-                        actions = ActionChains(driver)
-                        actions.key_down(Keys.SHIFT).send_keys(Keys.ENTER).key_up(Keys.SHIFT).perform()
-                        time.sleep(random.uniform(0.3, 0.5))
-
-                send_delay = random.uniform(0.8, 1.5)
-                time.sleep(send_delay)
+                time.sleep(random.uniform(0.6, 1.2))
 
                 actions = ActionChains(driver)
                 actions.send_keys(Keys.ENTER)
                 actions.perform()
                 
-                print(f"[বট উত্তর পাঠিয়েছে]: {chunk}")
-                time.sleep(random.uniform(1.2, 2.5))
+                print(f"[বট অংশটি পাঠিয়েছে]: {chunk}")
 
         except Exception as err:
             print(f"[মেসেজ পাঠাতে সমস্যা]: {err}")
