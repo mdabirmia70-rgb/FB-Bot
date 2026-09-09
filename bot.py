@@ -28,7 +28,6 @@ raw_keys = [
     os.getenv("GEMINI_API_KEY_5"),
     os.getenv("GEMINI_API_KEY")
 ]
-
 API_KEYS = [k for k in raw_keys if k]
 current_key_index = 0
 
@@ -60,57 +59,6 @@ CRITICAL RESPONSE RULES:
    - ALWAYS reply in natural Bangla script (Bangla font).
    - Use casual markers ("হুমম", "আরে না", "হাহা", "ওহ্", "আচ্ছা", "ধুর!") and natural emojis (😊, 🌸, 😅, ☕, 🙈, ✨)."""
 
-
-
-def send_telegram_alert(message):
-    if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
-        try:
-            url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-            payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message}
-            requests.post(url, json=payload)
-            print("[✅ টেলিগ্রামে সতর্কবার্তা পাঠানো হয়েছে!]")
-        except Exception as e:
-            print(f"[টেলিগ্রাম নোটিফিকেশন এরর]: {e}")
-
-def get_telegram_reply(user_msg):
-    if not (TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID):
-        return None
-
-    prompt_text = f"🚨 [API Limit / Busy Alert]\n\nইউজার মেসেজ পাঠিয়েছে:\n\"{user_msg}\"\n\nদয়া করে ১২০ সেকেন্ডের (২ মিনিট) মধ্যে রিপ্লাই দিন।"
-    send_telegram_alert(prompt_text)
-
-    try:
-        url_updates = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
-        res = requests.get(url_updates).json()
-        last_update_id = 0
-        if res.get("ok") and res.get("result"):
-            last_update_id = res["result"][-1]["update_id"]
-    except:
-        last_update_id = 0
-
-    print("-> টেলিগ্রাম থেকে ম্যানুয়াল উত্তরের জন্য ১২০ সেকেন্ড অপেক্ষা করা হচ্ছে...")
-
-    start_wait = time.time()
-    while time.time() - start_wait < 120:
-        try:
-            res = requests.get(f"{url_updates}?offset={last_update_id + 1}&timeout=5").json()
-            if res.get("ok") and res.get("result"):
-                for update in res["result"]:
-                    last_update_id = update["update_id"]
-                    msg = update.get("message", {})
-                    if str(msg.get("chat", {}).get("id")) == str(TELEGRAM_CHAT_ID) and "text" in msg:
-                        manual_reply = msg["text"].strip()
-                        print(f"[✅ টেলিগ্রাম থেকে উত্তর পাওয়া গেছে]: {manual_reply}")
-                        send_telegram_alert("👍 ম্যানুয়াল উত্তর রিসিভড! মেসেঞ্জারে পাঠানো হচ্ছে...")
-                        return manual_reply
-        except Exception as e:
-            print(f"[টেলিগ্রাম ওয়েট এরর]: {e}")
-        time.sleep(2)
-
-    print("[⏰ ১২০ সেকেন্ড শেষ! কোনো রিপ্লাই না পাওয়ায় আবার API-তে ট্রাই করা হচ্ছে...]")
-    send_telegram_alert("⏰ সময় শেষ! টেলিগ্রাম থেকে উত্তর না পাওয়ায় পুনরায় Gemini API চেষ্টা করা হচ্ছে...")
-    return None
-
 def get_current_time_context():
     bd_tz = timezone(timedelta(hours=6))
     now = datetime.now(bd_tz)
@@ -136,46 +84,46 @@ def generate_ai_response(user_message, chat_id="default_chat", attempt_count=1):
     global current_key_index
     print(f"-> Gemini AI এর কাছে উত্তর চাওয়া হচ্ছে (চ্যাট ID: {chat_id[-10:]}, Attempt: {attempt_count})...")
     
+    # আপনার চাওয়া মডেলগুলো যোগ করা হয়েছে
     models_to_try = [
         "gemini-3.6-flash",
         "gemini-3.6-flash-lite",
         "gemini-3.5-flash-lite",
-        "gemini-3.1-flash-lite"
+        "gemini-3.1-flash-lite",
+        "gemini-1.5-flash",
+        "gemini-1.5-pro"
     ]
 
     time_info = get_current_time_context()
     recent_history = fetch_screen_history()
 
     if API_KEYS:
-        for round_idx in range(2): 
+        for round_idx in range(2):
             for _ in range(len(API_KEYS)):
                 current_api_key = API_KEYS[current_key_index]
-                
                 for model_name in models_to_try:
                     try:
                         client = genai.Client(api_key=current_api_key)
-                        
                         prompt_with_context = f"চ্যাটের আগের ব্যাকগ্রাউন্ড হিস্ট্রি:\n{recent_history}\n\nইউজারের নতুন মেসেজ: {user_message} {time_info}"
-
+                        
                         chat_obj = client.chats.create(
                             model=model_name,
                             config={"system_instruction": SYSTEM_INSTRUCTION}
                         )
-                        
                         response = chat_obj.send_message(prompt_with_context)
-                        
                         if response and response.text:
                             return response.text.strip()
                     except Exception as e:
-                        print(f"[{model_name} এরর - Key {current_key_index + 1}]: {e}")
+                        error_log = f"⚠️ [{model_name} এরর - Key {current_key_index + 1}]: {e}"
+                        print(error_log)
+                        tg.send_telegram_alert(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, error_log)
                         time.sleep(0.5)
                         continue
-                
+
                 current_key_index = (current_key_index + 1) % len(API_KEYS)
 
     print(f"[⚠️ সব API Key বিজি/লিমিট শেষ! (লুপ {attempt_count})]")
-    telegram_reply = get_telegram_reply(user_message)
-    
+    telegram_reply = tg.get_telegram_reply(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, user_message)
     if telegram_reply:
         return telegram_reply
     else:
@@ -199,8 +147,8 @@ def is_stub_browser_or_driver(path):
     try:
         with open(path, "r", encoding="utf-8", errors="ignore") as fh:
             contents = fh.read(200)
-        if "requires the chromium snap to be installed" in contents:
-            return True
+            if "requires the chromium snap to be installed" in contents:
+                return True
     except OSError:
         pass
     return False
@@ -241,7 +189,7 @@ try:
     if "login" in driver.current_url or len(driver.find_elements(By.XPATH, '//div[@role="textbox"] | //div[@role="gridcell"]')) == 0:
         alert_msg = "⚠️ [FB Bot Alert] কুকিজের মেয়াদ শেষ বা লগইন ব্যর্থ হয়েছে!\nদয়া করে GitHub Secrets-এ নতুন কুকিজ আপডেট করে Workflow পুনরায় রান দিন।"
         print(f"\n[{alert_msg}]")
-        send_telegram_alert(alert_msg)
+        tg.send_telegram_alert(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, alert_msg)
         sys.exit(1)
 
     def handle_pin_popup():
@@ -270,19 +218,15 @@ try:
                 return True
         except Exception as e:
             print(f"[PIN হ্যান্ডলিং এরর]: {e}")
-        return False
+            return False
 
     handle_pin_popup()
 
-
-    
     def send_message(text_to_send):
-        """বড় গল্প বা টেক্সটকে ছোট ছোট ভাগে ভাগ করে নিজে থেকেই পরপর পাঠাবে"""
         try:
             MAX_CHUNK_LIMIT = 145
             message_chunks = []
 
-            # বড় মেসেজকে বাক্য ও দাড়ি/কমার ওপর ভিত্তি করে ১২০ অক্ষরের টুকরোতে ভাগ করা
             lines = [line.strip() for line in text_to_send.split("\n") if line.strip()]
             current_chunk = ""
 
@@ -292,7 +236,6 @@ try:
                 else:
                     if current_chunk:
                         message_chunks.append(current_chunk)
-                    
                     while len(line) > MAX_CHUNK_LIMIT:
                         split_pos = line.rfind(" ", 0, MAX_CHUNK_LIMIT)
                         if split_pos == -1:
@@ -304,12 +247,10 @@ try:
             if current_chunk:
                 message_chunks.append(current_chunk)
 
-            # ভাগ করা প্রতিটি মেসেজ ১-২ সেকেন্ড বিরতি দিয়ে পরপর টাইপ করে পাঠানো
             for chunk_index, chunk in enumerate(message_chunks):
                 msg_length = len(chunk)
                 char_delay_min, char_delay_max = 0.20, 0.28
 
-                # প্রথম টুকরোতে সামান্য ভাবার ভান করবে, পরেরগুলোতে ২-৩ সেকেন্ডের বিরতি নেবে
                 if chunk_index == 0:
                     time.sleep(random.uniform(1.0, 2.0))
                 else:
@@ -318,9 +259,8 @@ try:
                 message_box = driver.find_element(By.XPATH, '//div[@role="textbox"]')
                 message_box.click()
                 time.sleep(0.3)
-
                 print(f"-> টাইপিং পার্ট {chunk_index + 1}/{len(message_chunks)} ({msg_length} টি অক্ষর)...")
-                
+
                 for char in chunk:
                     actions = ActionChains(driver)
                     actions.send_keys(char)
@@ -328,11 +268,9 @@ try:
                     time.sleep(random.uniform(char_delay_min, char_delay_max))
 
                 time.sleep(random.uniform(0.6, 1.2))
-
                 actions = ActionChains(driver)
                 actions.send_keys(Keys.ENTER)
                 actions.perform()
-                
                 print(f"[বট অংশটি পাঠিয়েছে]: {chunk}")
 
         except Exception as err:
@@ -370,17 +308,28 @@ try:
     print(" Gemini AI বট মেসেজ রিসিভ করার জন্য প্রস্তুত...")
     print("==================================================\n")
 
+    # ১. বট চালু হবার সাথে সাথে টেলিগ্রামে নোটিফিকেশন ও বাটন মেনু পাঠাবে
+    tg.send_telegram_alert(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, "🚀 *FB Auto-Reply Bot সফলভাবে চালু হয়েছে!*")
+    tg.send_telegram_menu(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
+
     while True:
         if time.time() - start_time > MAX_RUN_TIME:
             print("5 hours completed. Stopping safely...")
             break
+
+        # ২. টেলিগ্রাম কমান্ড ও বাটন ক্লিক প্রসেস করবে
+        tg.check_telegram_commands(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
+
+        # ৩. অটোরিপ্লাই অফ করা থাকলে স্কিপ করবে
+        if tg.is_bot_paused:
+            time.sleep(3)
+            continue
 
         try:
             switch_to_unread_chat()
             current_chat_id = get_chat_unique_id()
 
             messages = driver.find_elements(By.XPATH, '//div[@role="row"]//div[@dir="auto"] | //div[@dir="auto"]')
-
             if messages:
                 last_element = messages[-1]
                 raw_msg = last_element.text.strip()
@@ -399,8 +348,8 @@ try:
                     continue
 
                 print(f"\n[নতুন মেসেজ রিসিভড (ID: {current_chat_id})]: {raw_msg}")
-
                 ai_reply = generate_ai_response(raw_msg, chat_id=current_chat_id)
+
                 if ai_reply:
                     send_message(ai_reply)
                     last_replied_message = raw_msg
@@ -410,13 +359,12 @@ try:
 
         except Exception as loop_error:
             print(f"[লুপ এরর]: {loop_error}")
-
-        time.sleep(2)
+            time.sleep(2)
 
 except Exception as e:
     err_msg = f"⚠️ [FB Bot Error]: {e}"
     print(f"[{err_msg}]")
-    send_telegram_alert(err_msg)
+    tg.send_telegram_alert(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, err_msg)
 finally:
     try:
         driver.quit()
