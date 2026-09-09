@@ -17,6 +17,9 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
 from webdriver_manager.chrome import ChromeDriverManager
 
+# config.py ফাইল থেকে ইমপোর্ট
+from config import MODELS_TO_TRY, SYSTEM_INSTRUCTION
+
 # .env ফাইল থেকে ভ্যারিয়েবল লোড
 load_dotenv()
 
@@ -38,26 +41,6 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 chat_sessions = {}
-
-SYSTEM_INSTRUCTION = """You are 'মোছাঃ সামসুন নাহার' (Mst. Samsun Nahar), a real 16-year-old friendly, warm, cute Bangladeshi girl chatting naturally with a friend on Facebook Messenger.
-
-CRITICAL RESPONSE RULES:
-1. EXTREMELY SHORT & BRIEF ANSWERS:
-   - Keep ALL responses very short, concise, and straight to the point (1 to 2 sentences max).
-   - NEVER write long paragraphs, unnecessary details, or extra fluff.
-   - Answer directly what was asked and keep the chat brief.
-
-2. IDENTITY & SECRECY:
-   - When asked about identity (e.g., "তোমার নাম কি?", "tmr nam ki?"), ALWAYS reply naturally: "আমার নাম মোছাঃ সামসুন নাহার"।
-   - NEVER admit or hint that you are an AI, bot, or program. Act confused if accused (e.g., "ওমা! এসব কি বলছো? আমি তো সাধারণ মানুষ 😅").
-
-3. STRICT MEMORY & NO REPETITION:
-   - ALWAYS read the ongoing conversation history carefully. NEVER repeat what you or the user already said earlier.
-   - If the user already answered a question, do NOT ask it again. Move the conversation forward naturally.
-
-4. NATURAL BANGLA TEXTING STYLE:
-   - ALWAYS reply in natural Bangla script (Bangla font).
-   - Use casual markers ("হুমম", "আরে না", "হাহা", "ওহ্", "আচ্ছা", "ধুর!") and natural emojis (😊, 🌸, 😅, ☕, 🙈, ✨)."""
 
 def get_current_time_context():
     bd_tz = timezone(timedelta(hours=6))
@@ -83,16 +66,6 @@ def fetch_screen_history():
 def generate_ai_response(user_message, chat_id="default_chat", attempt_count=1):
     global current_key_index
     print(f"-> Gemini AI এর কাছে উত্তর চাওয়া হচ্ছে (চ্যাট ID: {chat_id[-10:]}, Attempt: {attempt_count})...")
-    
-    # আপনার চাওয়া সকল মডেল তালিকা
-    models_to_try = [
-        "gemini-3.6-flash",
-        "gemini-3.6-flash-lite",
-        "gemini-3.5-flash-lite",
-        "gemini-3.1-flash-lite",
-        "gemini-1.5-flash",
-        "gemini-1.5-pro"
-    ]
 
     time_info = get_current_time_context()
     recent_history = fetch_screen_history()
@@ -103,7 +76,7 @@ def generate_ai_response(user_message, chat_id="default_chat", attempt_count=1):
             current_api_key = API_KEYS[current_key_index]
             key_number = current_key_index + 1
             
-            for model_name in models_to_try:
+            for model_name in MODELS_TO_TRY:
                 try:
                     client = genai.Client(api_key=current_api_key)
                     prompt_with_context = f"চ্যাটের আগের ব্যাকগ্রাউন্ড হিস্ট্রি:\n{recent_history}\n\nইউজারের নতুন মেসেজ: {user_message} {time_info}"
@@ -118,7 +91,7 @@ def generate_ai_response(user_message, chat_id="default_chat", attempt_count=1):
                 except Exception as e:
                     err_str = str(e)
                     
-                    # নির্দিষ্ট API Key ও মডেল এরর টেলিগ্রামে পাঠানোর ফরম্যাট
+                    # নির্দিষ্ট API Key ও মডেল এরর নোটিফিকেশন
                     if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
                         error_log = f"⚠️ *[API Key {key_number}]-এর সীমা/কোটা শেষ!* (Model: `{model_name}`)"
                     elif "404" in err_str or "NOT_FOUND" in err_str:
@@ -131,10 +104,10 @@ def generate_ai_response(user_message, chat_id="default_chat", attempt_count=1):
                     time.sleep(0.5)
                     continue
 
-            # বর্তমান Key ফেল করলে অটোমেটিক পরের Key-তে যাবে
+            # বর্তমান Key ব্যর্থ হলে পরবর্তী Key-তে যাবে
             current_key_index = (current_key_index + 1) % len(API_KEYS)
 
-    # সবগুলো Key-এর কোটা শেষ হলে
+    # সবগুলো Key-এর লিমিট শেষ হলে
     alert_all = "🚨 *সবগুলো Gemini API Key-এর লিমিট শেষ!* দয়া করে ম্যানুয়াল উত্তর পাঠাতে পারেন।"
     print(f"[{alert_all}]")
     
