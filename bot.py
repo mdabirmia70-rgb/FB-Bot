@@ -301,20 +301,20 @@ try:
         # টেলিগ্রাম থেকে ইনপুট/কমান্ড চেক
         tg.check_telegram_commands(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
 
-        # বট অফলাইন থাকলে কোনো চ্যাটের মধ্যে থাকবে না এবং মেসেঞ্জারের প্রধান হোমে চলে যাবে
+        # বট অফলাইন থাকলে মেসেঞ্জার পেজ ছেড়ে ফেসবুক নিউট্রাল পেজে চলে যাবে যাতে কোনো মেসেজ Seen না হয়
         if tg.is_bot_paused:
-            if "/messages/t/" in driver.current_url:
+            if "messages" in driver.current_url:
                 try:
                     driver.get("https://www.facebook.com")
-                    print("[🔒 বট অফলাইন: চ্যাট উইন্ডো বন্ধ করা হয়েছে যাতে মেসেজ Seen না হয়]")
+                    print("[🔴 বট অফলাইন: চ্যাট পেজ থেকে বেরিয়ে যাওয়া হয়েছে যাতে মেসেজ Seen না হয়]")
                 except Exception as e:
                     pass
             time.sleep(3)
             continue
 
         try:
-            # বট অনলাইন হলে পুনরায় মেসেঞ্জার পেজে ব্যাক করবে
-            if "/messages/t/" not in driver.current_url:
+            # বট পুনরায় অনলাইন হলে মেসেঞ্জার পেজে ব্যাক করবে
+            if "messages/t/" not in driver.current_url:
                 driver.get("https://www.facebook.com/messages/t/")
                 time.sleep(5)
 
@@ -353,11 +353,6 @@ try:
         except Exception as loop_error:
             print(f"[লুপ এরর]: {loop_error}")
             time.sleep(2)
-
-
-
-
-
 
 except Exception as e:
     err_msg = f"⚠️ [FB Bot Error]: {e}"
