@@ -8,6 +8,7 @@ on:
 jobs:
   run-bot:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -20,10 +21,12 @@ jobs:
       - name: Install Google Chrome & Clean Old Drivers
         run: |
           sudo rm -f /usr/bin/chromedriver /usr/local/bin/chromedriver
-          sudo apt-get update
-          sudo apt-get install -y wget fonts-liberation
-          wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get update || true
+          sudo apt-get install -y wget fonts-liberation libu2f-udev
+          wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
           sudo dpkg -i google-chrome-stable_current_amd64.deb || sudo apt-get install -f -y
+          rm google-chrome-stable_current_amd64.deb
 
       - name: Install Python packages
         run: |
@@ -40,4 +43,6 @@ jobs:
           FB_C_USER: ${{ secrets.FB_C_USER }}
           FB_XS_TOKEN: ${{ secrets.FB_XS_TOKEN }}
           E2EE_PIN: ${{ secrets.E2EE_PIN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python bot.py
