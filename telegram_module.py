@@ -1,4 +1,5 @@
 import requests
+import time
 
 is_bot_paused = False
 last_processed_update_id = 0
@@ -18,18 +19,24 @@ def send_telegram_alert(token, chat_id, message):
         print(f"[টেলিগ্রাম অ্যালার্ট এরর]: {e}")
 
 def send_telegram_menu(token, chat_id):
-    """টেলিগ্রামে ইনপুট বক্সের নিচে স্থায়ী Reply Keyboard বাটন পাঠাবে"""
+    """টেলিগ্রামে ইনপুট বক্সের নিচে আকর্ষণীয় ডিজাইনের Reply Keyboard বাটন পাঠাবে"""
     if not (token and chat_id):
         return
         
-    status_text = "🟢 অটো-রিপ্লাই চালু আছে" if not is_bot_paused else "🔴 অটো-রিপ্লাই বন্ধ আছে"
-    message = f"🤖 *FB Auto-Reply Control Panel*\n\nবর্তমান স্ট্যাটাস: {status_text}"
+    status_text = "🟢 ONLINE (অটো-রিপ্লাই চালু)" if not is_bot_paused else "🔴 OFFLINE (অটো-রিপ্লাই বন্ধ)"
+    message = (
+        "✨ *FB AUTO-REPLY CONTROL PANEL* ✨\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"⚙️ *বর্তমান স্ট্যাটাস:* `{status_text}`\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        "👇 _নিচের বাটন চেপে বট সিস্টেম নিয়ন্ত্রণ করুন:_"
+    )
     
-    # চ্যাট ইনপুট বক্সের নিচে স্থায়ী বাটন (Reply Keyboard)
+    # আকর্ষণীয় লুক ও ইমোজি সহ Reply Keyboard বাটন
     keyboard = {
         "keyboard": [
-            [{"text": "📊 Status Check"}],
-            [{"text": "⏹️ Turn OFF"}, {"text": "▶️ Turn ON"}]
+            [{"text": "⚡ BOT STATUS CHECK 📊"}],
+            [{"text": "🔴 TURN OFF BOT"}, {"text": "🟢 TURN ON BOT"}]
         ],
         "resize_keyboard": True,
         "one_time_keyboard": False
@@ -48,7 +55,7 @@ def send_telegram_menu(token, chat_id):
         print(f"[টেলিগ্রাম মেনু এরর]: {e}")
 
 def check_telegram_commands(token, chat_id):
-    """টেলিগ্রামের বাটন প্রেস ও ইনকামিং টেক্সট কমান্ড হ্যান্ডেল করবে"""
+    """টেলিগ্রামের আপডেট হওয়া বাটন প্রেস ও কমান্ড হ্যান্ডেল করবে"""
     global is_bot_paused, last_processed_update_id
     if not (token and chat_id):
         return
@@ -64,18 +71,18 @@ def check_telegram_commands(token, chat_id):
                 if "message" in update and "text" in update["message"]:
                     msg_text = update["message"]["text"].strip()
                     
-                    if "Status Check" in msg_text or msg_text == "/status":
-                        st = "🔴 বন্ধ (OFF)" if is_bot_paused else "🟢 চালু (ON)"
-                        send_telegram_alert(token, chat_id, f"📊 বট অটো-রিপ্লাই স্ট্যাটাস: {st}")
+                    if "BOT STATUS CHECK" in msg_text or msg_text == "/status":
+                        st = "🔴 অফলাইন (OFF)" if is_bot_paused else "🟢 অনলাইন (ON)"
+                        send_telegram_alert(token, chat_id, f"📊 *বটের বর্তমান স্ট্যাটাস:* `{st}`")
                         
-                    elif "Turn OFF" in msg_text or msg_text == "/off":
+                    elif "TURN OFF BOT" in msg_text or msg_text == "/off":
                         is_bot_paused = True
-                        send_telegram_alert(token, chat_id, "🔴 অটো-রিপ্লাই সফলভাবে বন্ধ করা হয়েছে!")
+                        send_telegram_alert(token, chat_id, "⏹️ *অটো-রিপ্লাই সফলভাবে বন্ধ করা হয়েছে!*")
                         send_telegram_menu(token, chat_id)
                         
-                    elif "Turn ON" in msg_text or msg_text == "/on":
+                    elif "TURN ON BOT" in msg_text or msg_text == "/on":
                         is_bot_paused = False
-                        send_telegram_alert(token, chat_id, "🟢 অটো-রিপ্লাই সফলভাবে চালু করা হয়েছে!")
+                        send_telegram_alert(token, chat_id, "🚀 *অটো-রিপ্লাই সফলভাবে চালু করা হয়েছে!*")
                         send_telegram_menu(token, chat_id)
                         
                     elif msg_text in ["/start", "/menu", "menu", "help"]:
