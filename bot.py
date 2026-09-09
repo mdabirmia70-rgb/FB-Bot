@@ -71,7 +71,6 @@ def generate_ai_response(user_message, chat_id="default_chat", attempt_count=1):
     recent_history = fetch_screen_history()
 
     if API_KEYS:
-        # সবগুলো API Key ট্রাই করার লুপ
         for _ in range(len(API_KEYS)):
             current_api_key = API_KEYS[current_key_index]
             key_number = current_key_index + 1
@@ -91,23 +90,18 @@ def generate_ai_response(user_message, chat_id="default_chat", attempt_count=1):
                 except Exception as e:
                     err_str = str(e)
                     
-                    # নির্দিষ্ট API Key ও মডেল এরর নোটিফিকেশন
-                    if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
-                        error_log = f"⚠️ *[API Key {key_number}]-এর সীমা/কোটা শেষ!* (Model: `{model_name}`)"
-                    elif "404" in err_str or "NOT_FOUND" in err_str:
-                        error_log = f"⚠️ *[API Key {key_number}]: `{model_name}` পাওয়া যায়নি!*"
-                    else:
-                        error_log = f"⚠️ *[API Key {key_number} এরর]:* {err_str[:120]}"
-                    
-                    print(error_log)
-                    tg.send_telegram_alert(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, error_log)
-                    time.sleep(0.5)
-                    continue
+                    if "404" in err_str or "NOT_FOUND" in err_str:
+                        print(f"[API Key {key_number}]: {model_name} মডেলটি পাওয়া যায়নি।")
+                        continue
+                        
+                    if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "Quota" in err_str:
+                        error_log = f"⚠️ *[API Key {key_number}]-এর কোটা/লিমিট শেষ!* (Model: `{model_name}`)"
+                        print(error_log)
+                        tg.send_telegram_alert(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, error_log)
+                        break
 
-            # বর্তমান Key ব্যর্থ হলে পরবর্তী Key-তে যাবে
             current_key_index = (current_key_index + 1) % len(API_KEYS)
 
-    # সবগুলো Key-এর লিমিট শেষ হলে
     alert_all = "🚨 *সবগুলো Gemini API Key-এর লিমিট শেষ!* দয়া করে ম্যানুয়াল উত্তর পাঠাতে পারেন।"
     print(f"[{alert_all}]")
     
@@ -296,7 +290,6 @@ try:
     print(" Gemini AI বট মেসেজ রিসিভ করার জন্য প্রস্তুত...")
     print("==================================================\n")
 
-    # স্টার্টআপ নোটিফিকেশন ও মেনু বাটন
     tg.send_telegram_alert(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, "🚀 *FB Auto-Reply Bot সফলভাবে চালু হয়েছে!*")
     tg.send_telegram_menu(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
 
@@ -305,15 +298,16 @@ try:
             print("5 hours completed. Stopping safely...")
             break
 
-        # টেলিগ্রাম থেকে ইনপুট বাটন চেকিং
+        # টেলিগ্রাম থেকে ইনপুট/কমান্ড চেক
         tg.check_telegram_commands(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
 
-        # অটো রিপ্লাই অফ থাকলে স্কিপ করবে
+        # বট অফলাইন থাকলে আনরিড চ্যাটে ঢুকবেও না, মেসেজ Seen বা রিপ্লাই করবে না
         if tg.is_bot_paused:
             time.sleep(3)
             continue
 
         try:
+            # বট অনলাইন থাকলে কেবল আনরিড চ্যাটে ঢুকবে
             switch_to_unread_chat()
             current_chat_id = get_chat_unique_id()
 
