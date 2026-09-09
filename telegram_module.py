@@ -25,10 +25,10 @@ def send_telegram_menu(token, chat_id):
         
     status_text = "🟢 ONLINE (অটো-রিপ্লাই চালু)" if not is_bot_paused else "🔴 OFFLINE (অটো-রিপ্লাই বন্ধ)"
     message = (
-        "✨ *FB AUTO-REPLY CONTROL PANEL* ✨\n"
-        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        "✨ *FB CONTROL PANEL* ✨\n"
+        "━━━━━━━━━━━━━━━━━━\n"
         f"⚙️ *বর্তমান স্ট্যাটাস:* `{status_text}`\n"
-        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        "━━━━━━━━━━━━━━━━━━\n"
         "👇 _নিচের বাটন চেপে বট সিস্টেম নিয়ন্ত্রণ করুন:_"
     )
     
