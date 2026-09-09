@@ -84,7 +84,7 @@ def generate_ai_response(user_message, chat_id="default_chat", attempt_count=1):
     global current_key_index
     print(f"-> Gemini AI এর কাছে উত্তর চাওয়া হচ্ছে (চ্যাট ID: {chat_id[-10:]}, Attempt: {attempt_count})...")
     
-    # আপনার চাওয়া মডেলগুলো যোগ করা হয়েছে
+    # আপনার চাওয়া সকল মডেল তালিকা
     models_to_try = [
         "gemini-3.6-flash",
         "gemini-3.6-flash-lite",
@@ -98,31 +98,46 @@ def generate_ai_response(user_message, chat_id="default_chat", attempt_count=1):
     recent_history = fetch_screen_history()
 
     if API_KEYS:
-        for round_idx in range(2):
-            for _ in range(len(API_KEYS)):
-                current_api_key = API_KEYS[current_key_index]
-                for model_name in models_to_try:
-                    try:
-                        client = genai.Client(api_key=current_api_key)
-                        prompt_with_context = f"চ্যাটের আগের ব্যাকগ্রাউন্ড হিস্ট্রি:\n{recent_history}\n\nইউজারের নতুন মেসেজ: {user_message} {time_info}"
-                        
-                        chat_obj = client.chats.create(
-                            model=model_name,
-                            config={"system_instruction": SYSTEM_INSTRUCTION}
-                        )
-                        response = chat_obj.send_message(prompt_with_context)
-                        if response and response.text:
-                            return response.text.strip()
-                    except Exception as e:
-                        error_log = f"⚠️ [{model_name} এরর - Key {current_key_index + 1}]: {e}"
-                        print(error_log)
-                        tg.send_telegram_alert(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, error_log)
-                        time.sleep(0.5)
-                        continue
+        # সবগুলো API Key ট্রাই করার লুপ
+        for _ in range(len(API_KEYS)):
+            current_api_key = API_KEYS[current_key_index]
+            key_number = current_key_index + 1
+            
+            for model_name in models_to_try:
+                try:
+                    client = genai.Client(api_key=current_api_key)
+                    prompt_with_context = f"চ্যাটের আগের ব্যাকগ্রাউন্ড হিস্ট্রি:\n{recent_history}\n\nইউজারের নতুন মেসেজ: {user_message} {time_info}"
+                    
+                    chat_obj = client.chats.create(
+                        model=model_name,
+                        config={"system_instruction": SYSTEM_INSTRUCTION}
+                    )
+                    response = chat_obj.send_message(prompt_with_context)
+                    if response and response.text:
+                        return response.text.strip()
+                except Exception as e:
+                    err_str = str(e)
+                    
+                    # নির্দিষ্ট API Key ও মডেল এরর টেলিগ্রামে পাঠানোর ফরম্যাট
+                    if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
+                        error_log = f"⚠️ *[API Key {key_number}]-এর সীমা/কোটা শেষ!* (Model: `{model_name}`)"
+                    elif "404" in err_str or "NOT_FOUND" in err_str:
+                        error_log = f"⚠️ *[API Key {key_number}]: `{model_name}` পাওয়া যায়নি!*"
+                    else:
+                        error_log = f"⚠️ *[API Key {key_number} এরর]:* {err_str[:120]}"
+                    
+                    print(error_log)
+                    tg.send_telegram_alert(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, error_log)
+                    time.sleep(0.5)
+                    continue
 
-                current_key_index = (current_key_index + 1) % len(API_KEYS)
+            # বর্তমান Key ফেল করলে অটোমেটিক পরের Key-তে যাবে
+            current_key_index = (current_key_index + 1) % len(API_KEYS)
 
-    print(f"[⚠️ সব API Key বিজি/লিমিট শেষ! (লুপ {attempt_count})]")
+    # সবগুলো Key-এর কোটা শেষ হলে
+    alert_all = "🚨 *সবগুলো Gemini API Key-এর লিমিট শেষ!* দয়া করে ম্যানুয়াল উত্তর পাঠাতে পারেন।"
+    print(f"[{alert_all}]")
+    
     telegram_reply = tg.get_telegram_reply(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, user_message)
     if telegram_reply:
         return telegram_reply
@@ -308,7 +323,7 @@ try:
     print(" Gemini AI বট মেসেজ রিসিভ করার জন্য প্রস্তুত...")
     print("==================================================\n")
 
-    # ১. বট চালু হবার সাথে সাথে টেলিগ্রামে নোটিফিকেশন ও বাটন মেনু পাঠাবে
+    # স্টার্টআপ নোটিফিকেশন ও মেনু বাটন
     tg.send_telegram_alert(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, "🚀 *FB Auto-Reply Bot সফলভাবে চালু হয়েছে!*")
     tg.send_telegram_menu(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
 
@@ -317,10 +332,10 @@ try:
             print("5 hours completed. Stopping safely...")
             break
 
-        # ২. টেলিগ্রাম কমান্ড ও বাটন ক্লিক প্রসেস করবে
+        # টেলিগ্রাম থেকে ইনপুট বাটন চেকিং
         tg.check_telegram_commands(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
 
-        # ৩. অটোরিপ্লাই অফ করা থাকলে স্কিপ করবে
+        # অটো রিপ্লাই অফ থাকলে স্কিপ করবে
         if tg.is_bot_paused:
             time.sleep(3)
             continue
