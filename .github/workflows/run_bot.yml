@@ -23,7 +23,7 @@ jobs:
           sudo rm -f /usr/bin/chromedriver /usr/local/bin/chromedriver
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update || true
-          sudo apt-get install -y wget fonts-liberation libu2f-udev
+          sudo apt-get install -y wget fonts-liberation libfido2-1
           wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
           sudo dpkg -i google-chrome-stable_current_amd64.deb || sudo apt-get install -f -y
           rm google-chrome-stable_current_amd64.deb
